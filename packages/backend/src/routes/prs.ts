@@ -624,4 +624,42 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       }
     }
   );
+
+  // Request reviewers for a pull request
+  typedServer.post(
+    '/:prNumber/reviewers',
+    {
+      schema: {
+        description: 'Request reviewers for a pull request',
+        tags: ['prs'],
+        params: z.object({
+          prNumber: z.coerce.number().int().positive(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+        body: z.object({
+          reviewers: z.array(z.string()).min(1),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const { reviewers } = request.body;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.requestReviewers(prNumber, reviewers);
+        return reply.code(201).send({ success: true });
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'Bad Request',
+          message: error instanceof Error ? error.message : 'Failed to request reviewers',
+          statusCode: 400,
+        });
+      }
+    }
+  );
 };

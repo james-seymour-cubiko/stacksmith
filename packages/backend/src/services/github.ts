@@ -601,6 +601,17 @@ export class GithubService {
     };
   }
 
+  async requestReviewers(prNumber: number, reviewers: string[]): Promise<void> {
+    this.ensureConfigured();
+
+    await this.octokit!.pulls.requestReviewers({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+      reviewers,
+    });
+  }
+
   async approvePR(prNumber: number): Promise<GithubReview> {
     this.ensureConfigured();
 

@@ -144,6 +144,12 @@ export const prsAPI = {
     fetchAPI<GithubReview>(`/prs/${prNumber}/approve?owner=${owner}&repo=${repo}`, {
       method: 'POST',
     }),
+
+  requestReviewers: (owner: string, repo: string, prNumber: number, reviewers: string[]) =>
+    fetchAPI<{ success: boolean }>(`/prs/${prNumber}/reviewers?owner=${owner}&repo=${repo}`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewers }),
+    }),
 };
 
 // Config API

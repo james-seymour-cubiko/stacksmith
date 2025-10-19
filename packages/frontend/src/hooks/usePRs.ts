@@ -144,6 +144,18 @@ export function useApprovePR(owner: string, repo: string, prNumber: number) {
   });
 }
 
+export function useRequestReviewers(owner: string, repo: string, prNumber: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (reviewers: string[]) => prsAPI.requestReviewers(owner, repo, prNumber, reviewers),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'reviews'] });
+    },
+  });
+}
+
 export function useDeleteComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 

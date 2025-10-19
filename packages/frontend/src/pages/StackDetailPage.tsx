@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useRequestReviewers } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
+import { ReviewStatusPanel } from '../components/ReviewStatusPanel';
 import { SyntaxHighlightedLine } from '../components/SyntaxHighlightedLine';
 import { InlineDiffLine } from '../components/InlineDiffLine';
 import { getLanguageFromFilename } from '../lib/languageMapper';
@@ -151,6 +152,9 @@ export function StackDetailPage() {
 
   // Approve PR mutation
   const approvePR = useApprovePR(owner || '', repo || '', currentPRNumber || 0);
+
+  // Request reviewers mutation
+  const requestReviewers = useRequestReviewers(owner || '', repo || '', currentPRNumber || 0);
 
   // Fetch GitHub config to get current user
   const { data: config } = useQuery({
@@ -773,14 +777,23 @@ export function StackDetailPage() {
             />
           </div>
 
-          {/* Right side - CI Status */}
+          {/* Right side - CI Status and Reviews */}
           {selectedPR && (
-            <CIStatusPanel
-              checkRuns={checkRuns}
-              checkRunsLoading={checkRunsLoading}
-              onRerunAll={() => rerunAllChecks.mutate()}
-              rerunPending={rerunAllChecks.isPending}
-            />
+            <div className="flex flex-col gap-0">
+              <CIStatusPanel
+                checkRuns={checkRuns}
+                checkRunsLoading={checkRunsLoading}
+                onRerunAll={() => rerunAllChecks.mutate()}
+                rerunPending={rerunAllChecks.isPending}
+              />
+              <ReviewStatusPanel
+                selectedPR={selectedPR}
+                reviews={reviews}
+                reviewsLoading={false}
+                onRequestReviewers={(usernames) => requestReviewers.mutate(usernames)}
+                requestReviewersPending={requestReviewers.isPending}
+              />
+            </div>
           )}
         </div>
 
