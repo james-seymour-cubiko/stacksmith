@@ -267,7 +267,7 @@ export class GithubService {
     }
   }
 
-  async mergePR(prNumber: number, mergeMethod: 'merge' | 'squash' | 'rebase' = 'merge'): Promise<{ merged: boolean; message: string; sha?: string }> {
+  async mergePR(prNumber: number, mergeMethod: 'merge' | 'squash' | 'rebase'): Promise<{ merged: boolean; message: string; sha?: string }> {
     this.ensureConfigured();
 
     try {

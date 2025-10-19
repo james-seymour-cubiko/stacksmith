@@ -468,7 +468,7 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         const { prNumber } = request.params;
         const { owner, repo } = request.query;
         const service = getServiceFromQuery(owner, repo);
-        const mergeMethod = request.body?.merge_method || 'merge';
+        const mergeMethod = request.body?.merge_method || 'rebase';
 
         const result = await service.mergePR(prNumber, mergeMethod);
         return reply.code(200).send(result);
