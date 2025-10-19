@@ -1,4 +1,4 @@
-# Review App
+# Stacksmith
 
 A code review platform for managing and reviewing stacked pull requests, with GitHub as the source of truth.
 

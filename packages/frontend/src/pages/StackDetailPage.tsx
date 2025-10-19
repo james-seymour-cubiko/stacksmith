@@ -450,7 +450,7 @@ export function StackDetailPage() {
       if (pr.merged_at) return '🎉'; // Merged
       if (pr.state === 'closed') return '🚫'; // Closed without merge
       if (pr.draft) return '📝'; // Draft
-      return '🔄'; // Open
+      return '👀'; // Open
     };
 
     // Determine CI emoji based on check runs from cache
@@ -472,7 +472,7 @@ export function StackDetailPage() {
 
       if (failedChecks > 0) return '💥'; // CI failed
       if (inProgressChecks > 0 || queuedChecks > 0) return '⏳'; // CI running
-      if (passedChecks === checkRuns.length && passedChecks > 0) return '✨'; // CI passed
+      if (passedChecks === checkRuns.length && passedChecks > 0) return '✅'; // CI passed
       return '❓'; // Unknown
     };
 
@@ -559,7 +559,7 @@ export function StackDetailPage() {
             <span className="w-4">
               {isExpanded ? '▼' : '▶'}
             </span>
-            <span>📁 {node.name}</span>
+            <span>🖿 {node.name}</span>
           </button>
           {isExpanded && node.children && (
             <div>
@@ -852,9 +852,9 @@ export function StackDetailPage() {
             {!isAddingPRComment && (
               <button
                 onClick={() => setIsAddingPRComment(true)}
-                className={`text-xs px-3 py-1 rounded ${theme.textPrimary} bg-everforest-green hover:bg-everforest-green/90 font-medium`}
+                className={`text-xs px-3 py-1 rounded text-everforest-bg0 bg-everforest-green hover:bg-everforest-green/90 font-medium`}
               >
-                Add Comment
+                Add comment
               </button>
             )}
           </div>

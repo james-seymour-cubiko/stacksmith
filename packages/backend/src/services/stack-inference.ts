@@ -50,7 +50,6 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
     // Create a stack for all PRs (including single PRs)
     const stackId = generateStackId(chain);
     const stackName = generateStackName(chain);
-    const now = new Date().toISOString();
 
     // Convert to StackedPRs with order information
     const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
@@ -66,8 +65,9 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
       description: chain.length > 1
         ? `Stack from ${chain[0].base.ref} with ${chain.length} PRs`
         : `Single PR: ${chain[0].title}`,
-      created_at: now,
-      updated_at: now,
+      created_at: chain[0].created_at,
+      // Find updated at of all PRs in the stack
+      updated_at: new Date(Math.max(...chain.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
       prs: stackedPRs,
     });
   }

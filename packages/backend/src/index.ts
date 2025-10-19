@@ -37,7 +37,7 @@ async function buildServer() {
   await server.register(swagger, {
     openapi: {
       info: {
-        title: 'Review App API',
+        title: 'Stacksmith API',
         description: 'API for managing stacked pull requests',
         version: '0.1.0',
       },

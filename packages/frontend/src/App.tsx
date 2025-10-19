@@ -39,7 +39,7 @@ function Navigation() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <h1 className="text-xl font-bold text-everforest-fg">Review App</h1>
+              <h1 className="text-xl font-bold text-everforest-fg">Stacksmith</h1>
             </div>
             <div className="ml-6 flex space-x-8">
               <Link to="/" className={linkClass('/stacks')}>

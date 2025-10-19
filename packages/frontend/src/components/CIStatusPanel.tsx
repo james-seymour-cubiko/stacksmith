@@ -20,7 +20,7 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
             <button
               onClick={onRerunAll}
               disabled={rerunPending}
-              className={`text-xs px-2 py-1 rounded ${theme.textPrimary} bg-everforest-green hover:bg-everforest-green/90 disabled:bg-everforest-bg3 disabled:text-everforest-grey0 disabled:cursor-not-allowed font-medium transition-colors`}
+              className={`text-xs px-2 py-1 rounded text-everforest-bg0 bg-everforest-green hover:bg-everforest-green/90 disabled:bg-everforest-bg3 disabled:text-everforest-grey0 disabled:cursor-not-allowed font-medium transition-colors`}
               title="Rerun all CI checks"
             >
               {rerunPending ? '⟳ Rerunning...' : '⟳ Rerun All'}

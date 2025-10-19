@@ -233,7 +233,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
-                {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state}
+                {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Open'}
               </span>
               <CIStatusBadge prNumber={pr.number} />
               <span className={`font-medium ${theme.textPrimary} truncate`}>

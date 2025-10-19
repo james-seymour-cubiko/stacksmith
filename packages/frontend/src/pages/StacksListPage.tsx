@@ -37,6 +37,7 @@ export function StacksListPage() {
 
     let filtered = stacks;
 
+    filtered = filtered.filter(stack => stack.prs.some(pr => pr.user.login !== "cubiko-integrations"));
     // Filter by author
     if (selectedAuthor !== 'all') {
       filtered = filtered.filter(stack =>

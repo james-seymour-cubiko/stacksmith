@@ -37,8 +37,8 @@ export function StackHeader({
             onClick={onShareStack}
             className={`ml-4 px-4 py-2 rounded text-sm font-medium transition-colors ${
               isCopied
-                ? 'bg-everforest-green text-everforest-bg0'
-                : 'bg-everforest-blue text-everforest-bg0 hover:bg-everforest-blue/90'
+                ? 'bg-everforest-blue text-everforest-bg0'
+                : 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
             }`}
           >
             {isCopied ? '✓ Copied!' : '📋 Share Stack'}
