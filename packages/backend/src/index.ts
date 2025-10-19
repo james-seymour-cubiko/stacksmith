@@ -78,10 +78,11 @@ async function start() {
     const githubOwner = process.env.GITHUB_OWNER;
     const githubRepo = process.env.GITHUB_REPO;
     const githubToken = process.env.GITHUB_TOKEN;
+    const githubCurrentUser = process.env.GITHUB_CURRENT_USER;
 
     if (githubOwner && githubRepo) {
-      githubService.configure(githubOwner, githubRepo, githubToken);
-      console.log(`✓ GitHub configured: ${githubOwner}/${githubRepo}`);
+      githubService.configure(githubOwner, githubRepo, githubToken, githubCurrentUser);
+      console.log(`✓ GitHub configured: ${githubOwner}/${githubRepo}${githubCurrentUser ? ` (user: ${githubCurrentUser})` : ''}`);
     }
 
     const server = await buildServer();

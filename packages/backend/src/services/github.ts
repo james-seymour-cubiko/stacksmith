@@ -5,10 +5,12 @@ export class GithubService {
   private octokit: Octokit | null = null;
   private owner: string = '';
   private repo: string = '';
+  private currentUser: string = '';
 
-  configure(owner: string, repo: string, token?: string) {
+  configure(owner: string, repo: string, token?: string, currentUser?: string) {
     this.owner = owner;
     this.repo = repo;
+    this.currentUser = currentUser || '';
     this.octokit = new Octokit({
       auth: token,
     });
@@ -22,6 +24,7 @@ export class GithubService {
     return {
       owner: this.owner,
       repo: this.repo,
+      currentUser: this.currentUser || undefined,
     };
   }
 

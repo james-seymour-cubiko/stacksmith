@@ -175,6 +175,7 @@ export interface GithubConfig {
   owner: string;
   repo: string;
   token?: string; // May be omitted in responses for security
+  currentUser?: string; // GitHub username of the current user
 }
 
 export interface AppConfig {
@@ -202,6 +203,7 @@ export interface ConfigureGithubRequest {
   owner: string;
   repo: string;
   token: string;
+  currentUser?: string;
 }
 
 export interface SyncStackResponse {

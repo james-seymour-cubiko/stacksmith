@@ -43,8 +43,8 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
       },
     },
     async (request, _reply) => {
-      const { owner, repo, token } = request.body;
-      githubService.configure(owner, repo, token);
+      const { owner, repo, token, currentUser } = request.body;
+      githubService.configure(owner, repo, token, currentUser);
       return { success: true };
     }
   );

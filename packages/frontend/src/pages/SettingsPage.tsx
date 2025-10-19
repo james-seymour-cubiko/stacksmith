@@ -14,6 +14,7 @@ export function SettingsPage() {
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [token, setToken] = useState('');
+  const [currentUser, setCurrentUser] = useState('');
 
   const configureMutation = useMutation({
     mutationFn: configAPI.configureGithub,
@@ -31,11 +32,11 @@ export function SettingsPage() {
     e.preventDefault();
 
     if (!owner || !repo || !token) {
-      alert('Please fill in all fields');
+      alert('Please fill in all required fields');
       return;
     }
 
-    configureMutation.mutate({ owner, repo, token });
+    configureMutation.mutate({ owner, repo, token, currentUser: currentUser || undefined });
   };
 
   return (
@@ -61,6 +62,7 @@ export function SettingsPage() {
           <div className={`px-6 py-4 ${theme.successBox} border-b border`}>
             <p className={`text-sm ${theme.textSuccess}`}>
               Currently configured: <strong>{config.owner}/{config.repo}</strong>
+              {config.currentUser && <span> • User: <strong>{config.currentUser}</strong></span>}
             </p>
           </div>
         )}
@@ -121,6 +123,23 @@ export function SettingsPage() {
                 github.com/settings/tokens
               </a>{' '}
               with <code className={`text-xs ${theme.bgTertiary} px-1 py-0.5 rounded`}>repo</code> scope
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="currentUser" className={`block text-sm font-medium ${theme.textSecondary}`}>
+              Your GitHub Username (Optional)
+            </label>
+            <input
+              type="text"
+              id="currentUser"
+              value={currentUser}
+              onChange={(e) => setCurrentUser(e.target.value)}
+              placeholder="e.g., octocat"
+              className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm px-3 py-2 border ${theme.input}`}
+            />
+            <p className={`mt-1 text-sm ${theme.textSecondary}`}>
+              Set this to filter PRs to show only your pull requests
             </p>
           </div>
 

@@ -32,11 +32,13 @@ export const ConfigureGithubSchema = z.object({
   owner: z.string().min(1),
   repo: z.string().min(1),
   token: z.string().min(1),
+  currentUser: z.string().optional(),
 });
 
 export const GithubConfigSchema = z.object({
   owner: z.string(),
   repo: z.string(),
+  currentUser: z.string().optional(),
 });
 
 // Error schema
