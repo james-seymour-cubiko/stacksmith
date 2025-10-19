@@ -1,7 +1,7 @@
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
-// Import only commonly used languages to reduce bundle size
+// Import only commonly used languages to reduce bundle size (+ clojure)
 import javascript from 'react-syntax-highlighter/dist/esm/languages/hljs/javascript';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/hljs/typescript';
 import python from 'react-syntax-highlighter/dist/esm/languages/hljs/python';
@@ -21,6 +21,7 @@ import scss from 'react-syntax-highlighter/dist/esm/languages/hljs/scss';
 import sql from 'react-syntax-highlighter/dist/esm/languages/hljs/sql';
 import markdown from 'react-syntax-highlighter/dist/esm/languages/hljs/markdown';
 import dockerfile from 'react-syntax-highlighter/dist/esm/languages/hljs/dockerfile';
+import clojure from 'react-syntax-highlighter/dist/esm/languages/hljs/clojure';
 
 // Register languages
 SyntaxHighlighter.registerLanguage('javascript', javascript);
@@ -46,10 +47,10 @@ SyntaxHighlighter.registerLanguage('scss', scss);
 SyntaxHighlighter.registerLanguage('sql', sql);
 SyntaxHighlighter.registerLanguage('markdown', markdown);
 SyntaxHighlighter.registerLanguage('dockerfile', dockerfile);
+SyntaxHighlighter.registerLanguage('clojure', clojure);
 
 // Custom Everforest-compatible theme
 const everforestTheme = {
-  ...atomOneDark,
   'hljs': {
     display: 'inline',
     background: 'transparent',
@@ -68,16 +69,19 @@ const everforestTheme = {
   'hljs-number': {
     color: '#d699b6', // everforest-purple
   },
-  'hljs-function': {
+  'hljs-title-function': {
     color: '#7fbbb3', // everforest-aqua
   },
   'hljs-class': {
     color: '#dbbc7f', // everforest-yellow
   },
   'hljs-title': {
-    color: '#dbbc7f', // everforest-yellow
+    color: '#d3c6aa', // everforest-fg
   },
   'hljs-variable': {
+    color: '#d3c6aa', // everforest-fg
+  },
+  'hljs-variable-language': {
     color: '#d3c6aa', // everforest-fg
   },
   'hljs-type': {
@@ -91,6 +95,48 @@ const everforestTheme = {
   },
   'hljs-literal': {
     color: '#d699b6', // everforest-purple
+  },
+  'hljs-attribute': {
+    color: '#e67e80', // everforest-red
+  },
+  'hljs-doctag': {
+    color: '#a7c080', // everforest-green
+  },
+  'hljs-emphasis': {
+    color: '#7fbbb3', // everforest-aqua
+  },
+  'hljs-formula': {
+    color: '#e67e80', // everforest-red
+  },
+  'hljs-link': {
+    color: '#d699b6', // everforest-purple
+  },
+  'hljs-meta': {
+    color: '#e69875', // everforest-orange
+  },
+  'hljs-meta-string': {
+    color: '#a7c080', // everforest-green
+  },
+  'hljs-quote': {
+    color: '#dbbc7f', // everforest-yellow
+  },
+  'hljs-regexp': {
+    color: '#7fbbb3', // everforest-aqua
+  },
+  'hljs-section': {
+    color: '#d699b6', // everforest-purple
+  },
+  'hljs-strong': {
+    color: '#83c092', // everforest-blue-green
+  },
+  'hljs-subst': {
+    color: '#7fbbb3', // everforest-aqua
+  },
+  'hljs-symbol': {
+    color: '#e69875', // everforest-orange
+  },
+  'hljs-template-variable': {
+    color: '#7fbbb3', // everforest-aqua
   },
 };
 

@@ -75,6 +75,12 @@ export function getLanguageFromFilename(filename: string): string {
     // SQL
     'sql': 'sql',
 
+    // Clojure
+    'clj': 'clojure',
+    'cljs': 'clojure',
+    'cljc': 'clojure',
+    'edn': 'clojure',
+
     // Others
     'swift': 'swift',
     'r': 'r',

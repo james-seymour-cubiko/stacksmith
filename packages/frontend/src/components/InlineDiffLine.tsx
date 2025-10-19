@@ -14,9 +14,9 @@ export function InlineDiffLine({ segments, language, isModifiedLine }: InlineDif
       {segments.map((segment, index) => {
         const bgClass =
           segment.type === 'delete'
-            ? 'bg-everforest-red/55 text-everforest-red'
+            ? 'bg-everforest-red/35 text-everforest-red'
             : segment.type === 'insert'
-            ? 'bg-everforest-green/55 text-everforest-green'
+            ? 'bg-everforest-green/35 text-everforest-green'
             : '';
 
         return (

@@ -1167,7 +1167,7 @@ export function StackDetailPage() {
                       {file.patch && expandedFiles?.has(file.filename) && (
                         <div className="flex">
                           {/* Left Side - Original */}
-                          <div className={`flex-1 border-r ${theme.border} ${theme.bgSecondary}`}>
+                          <div className={`flex-1 border-r ${theme.border} ${theme.bgPrimary}`}>
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Original</span>
                             </div>
@@ -1384,7 +1384,7 @@ export function StackDetailPage() {
                           </div>
 
                           {/* Right Side - Modified */}
-                          <div className={`flex-1 ${theme.bgSecondary}`}>
+                          <div className={`flex-1 ${theme.bgPrimary}`}>
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Modified</span>
                             </div>

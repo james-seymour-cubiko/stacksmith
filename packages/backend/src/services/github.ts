@@ -311,7 +311,7 @@ export class GithubService {
       ref: pr.head.sha,
     });
 
-    return data.check_runs.map((check) => ({
+    return data.check_runs.filter((check) => check.name !== "Graphite / mergeability_check").map((check) => ({
       id: check.id,
       name: check.name,
       status: check.status as 'queued' | 'in_progress' | 'completed',
