@@ -7,7 +7,9 @@ import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
 import { SyntaxHighlightedLine } from '../components/SyntaxHighlightedLine';
+import { InlineDiffLine } from '../components/InlineDiffLine';
 import { getLanguageFromFilename } from '../lib/languageMapper';
+import DiffMatchPatch from 'diff-match-patch';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
 interface FileTreeNode {
@@ -28,13 +30,35 @@ interface FileTreeNodeInternal {
 
 
 export function StackDetailPage() {
-  const { stackId } = useParams<{ stackId: string }>();
+  const { stackId, prNumber } = useParams<{ stackId: string; prNumber?: string }>();
   const { data: stack, isLoading, error } = useStack(stackId);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  // Track selected PR for diff view (default to first PR)
-  const [selectedPRNumber, setSelectedPRNumber] = useState<number | null>(null);
+  // Track selected PR for diff view (read from URL or default to first PR)
+  const [selectedPRNumber, setSelectedPRNumber] = useState<number | null>(
+    prNumber ? parseInt(prNumber) : null
+  );
+
+  // Sync selected PR when URL changes
+  useEffect(() => {
+    if (prNumber) {
+      const prNum = parseInt(prNumber);
+      if (prNum !== selectedPRNumber) {
+        setSelectedPRNumber(prNum);
+      }
+    }
+  }, [prNumber]);
+
+  // Update URL when selected PR changes
+  useEffect(() => {
+    if (selectedPRNumber && stackId) {
+      const newPath = `/stacks/${stackId}/pr/${selectedPRNumber}`;
+      if (window.location.pathname !== newPath) {
+        navigate(newPath, { replace: true });
+      }
+    }
+  }, [selectedPRNumber, stackId, navigate]);
 
   // Track selected file for highlighting
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -140,13 +164,13 @@ export function StackDetailPage() {
   // Track comments section collapse state
   const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
 
-  // Track expanded files in diff view (files are expanded by default)
+  // Track expanded files in diff view (files are collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string> | null>(null);
 
-  // Initialize all files as expanded when diff loads
+  // Initialize all files as collapsed when diff loads
   useEffect(() => {
     if (diff && expandedFiles === null) {
-      setExpandedFiles(new Set(diff.map(f => f.filename)));
+      setExpandedFiles(new Set());
     }
   }, [diff, expandedFiles]);
 
@@ -545,13 +569,17 @@ export function StackDetailPage() {
       theme.fileModified;
 
     const isSelected = selectedFile === node.path;
+    const isFileExpanded = expandedFiles?.has(node.path) ?? false;
 
     return (
       <button
-        onClick={() => scrollToFile(node.path)}
+        onClick={() => {
+          scrollToFile(node.path);
+          toggleFileExpanded(node.path);
+        }}
         className={`w-full text-left px-2 py-1 rounded flex items-center gap-1 text-xs transition-colors ${
           isSelected ? 'bg-everforest-bg2 border-l-2 border-everforest-green' : 'hover:bg-everforest-bg2'
-        }`}
+        } ${!isFileExpanded ? 'opacity-50' : ''}`}
         style={{ paddingLeft: `${depth * 12 + 24}px` }}
       >
         <span className={`px-1 py-0.5 rounded text-xs font-medium ${statusColor}`}>
@@ -569,14 +597,27 @@ export function StackDetailPage() {
 
   // Parse diff into split view format
   const parseDiffForSplitView = (patch: string) => {
+    const dmp = new DiffMatchPatch();
     const lines = patch.split('\n');
-    const leftLines: { lineNum: number | null; content: string; type: 'context' | 'removed' | 'empty' }[] = [];
-    const rightLines: { lineNum: number | null; content: string; type: 'context' | 'added' | 'empty' }[] = [];
+
+    type DiffSegment = { text: string; type: 'equal' | 'delete' | 'insert' };
+    type LineData = {
+      lineNum: number | null;
+      content: string;
+      type: 'context' | 'removed' | 'added' | 'empty' | 'modified';
+      inlineDiff?: DiffSegment[];
+    };
+
+    const leftLines: LineData[] = [];
+    const rightLines: LineData[] = [];
 
     let leftLineNum = 0;
     let rightLineNum = 0;
+    let i = 0;
 
-    for (const line of lines) {
+    while (i < lines.length) {
+      const line = lines[i];
+
       if (line.startsWith('@@')) {
         // Parse hunk header to get line numbers
         const match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/);
@@ -586,16 +627,103 @@ export function StackDetailPage() {
         }
         leftLines.push({ lineNum: null, content: line, type: 'context' });
         rightLines.push({ lineNum: null, content: line, type: 'context' });
+        i++;
       } else if (line.startsWith('-')) {
-        leftLines.push({ lineNum: leftLineNum++, content: line.slice(1), type: 'removed' });
-        rightLines.push({ lineNum: null, content: '', type: 'empty' });
+        // Collect all consecutive removed lines
+        const removedLines: string[] = [];
+        let j = i;
+        while (j < lines.length && lines[j].startsWith('-')) {
+          removedLines.push(lines[j].slice(1));
+          j++;
+        }
+
+        // Check if followed by added lines
+        const addedLines: string[] = [];
+        let k = j;
+        while (k < lines.length && lines[k].startsWith('+')) {
+          addedLines.push(lines[k].slice(1));
+          k++;
+        }
+
+        if (addedLines.length > 0) {
+          // We have a block of removes followed by adds - pair them up
+          const maxLines = Math.max(removedLines.length, addedLines.length);
+
+          for (let idx = 0; idx < maxLines; idx++) {
+            const oldContent = removedLines[idx];
+            const newContent = addedLines[idx];
+
+            if (oldContent !== undefined && newContent !== undefined) {
+              // Pair these lines and compute inline diff
+              const diffs = dmp.diff_main(oldContent, newContent);
+              dmp.diff_cleanupSemantic(diffs);
+
+              // Calculate similarity ratio
+              let equalChars = 0;
+              let totalChars = 0;
+              for (const [op, text] of diffs) {
+                totalChars += text.length;
+                if (op === 0) equalChars += text.length; // 0 = DIFF_EQUAL
+              }
+              const similarity = totalChars > 0 ? equalChars / totalChars : 0;
+
+              // Only show inline diff if > 40% similar, otherwise show as regular modified lines
+              if (similarity > 0.4) {
+                const leftSegments: DiffSegment[] = [];
+                const rightSegments: DiffSegment[] = [];
+
+                for (const [op, text] of diffs) {
+                  if (op === 0) {
+                    // Equal
+                    leftSegments.push({ text, type: 'equal' });
+                    rightSegments.push({ text, type: 'equal' });
+                  } else if (op === -1) {
+                    // Delete
+                    leftSegments.push({ text, type: 'delete' });
+                  } else if (op === 1) {
+                    // Insert
+                    rightSegments.push({ text, type: 'insert' });
+                  }
+                }
+
+                leftLines.push({ lineNum: leftLineNum++, content: oldContent, type: 'modified', inlineDiff: leftSegments });
+                rightLines.push({ lineNum: rightLineNum++, content: newContent, type: 'modified', inlineDiff: rightSegments });
+              } else {
+                // Too different - show as separate remove and add without inline diff
+                leftLines.push({ lineNum: leftLineNum++, content: oldContent, type: 'removed' });
+                rightLines.push({ lineNum: rightLineNum++, content: newContent, type: 'added' });
+              }
+            } else if (oldContent !== undefined) {
+              // Only removed line, no corresponding add
+              leftLines.push({ lineNum: leftLineNum++, content: oldContent, type: 'removed' });
+              rightLines.push({ lineNum: null, content: '', type: 'empty' });
+            } else if (newContent !== undefined) {
+              // Only added line, no corresponding remove
+              leftLines.push({ lineNum: null, content: '', type: 'empty' });
+              rightLines.push({ lineNum: rightLineNum++, content: newContent, type: 'added' });
+            }
+          }
+
+          i = k; // Skip all processed lines
+        } else {
+          // Only removed lines, no adds following
+          for (const content of removedLines) {
+            leftLines.push({ lineNum: leftLineNum++, content, type: 'removed' });
+            rightLines.push({ lineNum: null, content: '', type: 'empty' });
+          }
+          i = j;
+        }
       } else if (line.startsWith('+')) {
+        // Standalone added line (not preceded by removes)
         leftLines.push({ lineNum: null, content: '', type: 'empty' });
         rightLines.push({ lineNum: rightLineNum++, content: line.slice(1), type: 'added' });
+        i++;
       } else {
         // Context line
-        leftLines.push({ lineNum: leftLineNum++, content: line.startsWith(' ') ? line.slice(1) : line, type: 'context' });
-        rightLines.push({ lineNum: rightLineNum++, content: line.startsWith(' ') ? line.slice(1) : line, type: 'context' });
+        const content = line.startsWith(' ') ? line.slice(1) : line;
+        leftLines.push({ lineNum: leftLineNum++, content, type: 'context' });
+        rightLines.push({ lineNum: rightLineNum++, content, type: 'context' });
+        i++;
       }
     }
 
@@ -874,7 +1002,7 @@ export function StackDetailPage() {
       {selectedPR && (
         <div className="flex gap-6">
           {/* Left Sidebar - File Tree */}
-          <div className={`w-64 flex-shrink-0 ${theme.card} overflow-y-auto sticky top-6 self-start max-h-[calc(100vh-8rem)]`}>
+          <div className={`w-80 flex-shrink-0 ${theme.card} overflow-y-auto sticky top-6 self-start max-h-[calc(100vh-8rem)]`}>
             {/* Files Changed Section */}
             <div className={`px-4 py-3 border-b ${theme.border} sticky top-0 ${theme.bgSecondary} z-10`}>
               <h3 className={`text-sm font-medium ${theme.textPrimary}`}>
@@ -1029,7 +1157,8 @@ export function StackDetailPage() {
                             <div>
                               {leftLines.map((line, index) => {
                                 const isRemoved = line.type === 'removed';
-                                const canComment = isRemoved && line.lineNum !== null;
+                                const isModified = line.type === 'modified';
+                                const canComment = (isRemoved || isModified) && line.lineNum !== null;
 
                                 // Check if this line is in the selected range
                                 const isInCommentRange = commentingLine?.file === file.filename &&
@@ -1058,10 +1187,10 @@ export function StackDetailPage() {
                                   <div key={index}>
                                     <div
                                       className={`flex font-mono text-xs ${
-                                        isRemoved ? 'bg-everforest-bg-red' : ''
+                                        isRemoved ? 'bg-everforest-bg-red' : isModified ? 'bg-everforest-bg-red/15' : ''
                                       } ${isInSelectionRange ? 'bg-everforest-blue/20' : ''} ${
                                         isInCommentRange ? 'bg-everforest-aqua/20' : ''
-                                      } ${canComment ? 'cursor-pointer hover:bg-everforest-bg1' : ''}`}
+                                      } ${canComment ? 'cursor-pointer' : ''}`}
                                       onMouseDown={() => canComment && handleLineMouseDown(file.filename, line.lineNum!, 'left')}
                                       onMouseEnter={() => canComment && handleLineMouseEnter(file.filename, line.lineNum!, 'left')}
                                     >
@@ -1069,7 +1198,7 @@ export function StackDetailPage() {
                                         {line.lineNum ?? ''}
                                       </span>
                                       <span className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${
-                                        isRemoved ? 'text-everforest-red' :
+                                        isRemoved || isModified ? 'text-everforest-red' :
                                         line.type === 'context' && line.content.startsWith('@@') ? 'text-everforest-blue' :
                                         line.type === 'empty' ? theme.textMuted :
                                         theme.textSecondary
@@ -1078,6 +1207,8 @@ export function StackDetailPage() {
                                           line.content || ' '
                                         ) : line.type === 'empty' || !line.content ? (
                                           ' '
+                                        ) : line.inlineDiff ? (
+                                          <InlineDiffLine segments={line.inlineDiff} language={language} isModifiedLine={true} />
                                         ) : (
                                           <SyntaxHighlightedLine code={line.content} language={language} />
                                         )}
@@ -1243,7 +1374,8 @@ export function StackDetailPage() {
                             <div>
                               {rightLines.map((line, index) => {
                                 const isAdded = line.type === 'added';
-                                const canComment = isAdded && line.lineNum !== null;
+                                const isModified = line.type === 'modified';
+                                const canComment = (isAdded || isModified) && line.lineNum !== null;
 
                                 // Check if this line is in the selected range
                                 const isInCommentRange = commentingLine?.file === file.filename &&
@@ -1268,10 +1400,10 @@ export function StackDetailPage() {
                                   <div key={index}>
                                     <div
                                       className={`flex font-mono text-xs ${
-                                        isAdded ? 'bg-everforest-bg-green' : ''
+                                        isAdded ? 'bg-everforest-bg-green' : isModified ? 'bg-everforest-bg-green/15' : ''
                                       } ${isInSelectionRange ? 'bg-everforest-blue/20' : ''} ${
                                         isInCommentRange ? 'bg-everforest-aqua/20' : ''
-                                      } ${canComment ? 'cursor-pointer hover:bg-everforest-bg1' : ''}`}
+                                      } ${canComment ? 'cursor-pointer' : ''}`}
                                       onMouseDown={() => canComment && handleLineMouseDown(file.filename, line.lineNum!, 'right')}
                                       onMouseEnter={() => canComment && handleLineMouseEnter(file.filename, line.lineNum!, 'right')}
                                     >
@@ -1279,7 +1411,7 @@ export function StackDetailPage() {
                                         {line.lineNum ?? ''}
                                       </span>
                                       <span className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${
-                                        isAdded ? 'text-everforest-green' :
+                                        isAdded || isModified ? 'text-everforest-green' :
                                         line.type === 'context' && line.content.startsWith('@@') ? 'text-everforest-blue' :
                                         line.type === 'empty' ? theme.textMuted :
                                         theme.textSecondary
@@ -1288,6 +1420,8 @@ export function StackDetailPage() {
                                           line.content || ' '
                                         ) : line.type === 'empty' || !line.content ? (
                                           ' '
+                                        ) : line.inlineDiff ? (
+                                          <InlineDiffLine segments={line.inlineDiff} language={language} isModifiedLine={true} />
                                         ) : (
                                           <SyntaxHighlightedLine code={line.content} language={language} />
                                         )}

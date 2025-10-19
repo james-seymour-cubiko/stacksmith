@@ -65,6 +65,7 @@ function MainContent() {
       <Routes>
         <Route path="/" element={<StacksListPage />} />
         <Route path="/stacks/:stackId" element={<StackDetailPage />} />
+        <Route path="/stacks/:stackId/pr/:prNumber" element={<StackDetailPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </main>
