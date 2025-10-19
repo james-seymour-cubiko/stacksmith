@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
 import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
+import { StackHeader } from '../components/StackHeader';
+import { CIStatusPanel } from '../components/CIStatusPanel';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
 interface FileTreeNode {
@@ -22,267 +24,6 @@ interface FileTreeNodeInternal {
   fileData?: GithubDiff;
 }
 
-// Hook to get CI status for a PR
-function useCIStatus(prNumber: number) {
-  const { data: checkRuns, isLoading } = usePRCheckRuns(prNumber);
-
-  const failedChecks = checkRuns?.filter((c) => c.conclusion === 'failure').length || 0;
-  const inProgressChecks = checkRuns?.filter((c) => c.status === 'in_progress').length || 0;
-  const queuedChecks = checkRuns?.filter((c) => c.status === 'queued').length || 0;
-  const passedChecks = checkRuns?.filter((c) => c.conclusion === 'success').length || 0;
-  const totalChecks = checkRuns?.length || 0;
-
-  return {
-    checkRuns,
-    isLoading,
-    failedChecks,
-    inProgressChecks,
-    queuedChecks,
-    passedChecks,
-    totalChecks,
-    hasFailed: failedChecks > 0,
-    isRunning: inProgressChecks > 0 || queuedChecks > 0,
-    allPassed: totalChecks > 0 && passedChecks === totalChecks,
-  };
-}
-
-// Component to display CI status badge for a PR
-function CIStatusBadge({ prNumber }: { prNumber: number }) {
-  const ciStatus = useCIStatus(prNumber);
-
-  if (ciStatus.isLoading) {
-    return (
-      <span className={`px-2 py-0.5 rounded text-xs font-medium bg-everforest-bg3 text-everforest-grey0`}>
-        CI: ...
-      </span>
-    );
-  }
-
-  if (!ciStatus.checkRuns || ciStatus.totalChecks === 0) {
-    return null;
-  }
-
-  let badgeColor = '';
-  let badgeText = '';
-  let badgeIcon = '';
-
-  if (ciStatus.hasFailed) {
-    badgeColor = 'bg-everforest-red/20 text-everforest-red';
-    badgeIcon = '✗';
-    badgeText = `CI: ${ciStatus.failedChecks} failed`;
-  } else if (ciStatus.isRunning) {
-    badgeColor = 'bg-everforest-yellow/20 text-everforest-yellow';
-    badgeIcon = '⟳';
-    badgeText = `CI: ${ciStatus.inProgressChecks + ciStatus.queuedChecks} running`;
-  } else if (ciStatus.allPassed) {
-    badgeColor = 'bg-everforest-green/20 text-everforest-green';
-    badgeIcon = '✓';
-    badgeText = `CI: ${ciStatus.passedChecks} passed`;
-  } else {
-    badgeColor = 'bg-everforest-bg3 text-everforest-grey0';
-    badgeIcon = '○';
-    badgeText = `CI: ${ciStatus.totalChecks}`;
-  }
-
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${badgeColor}`}>
-      {badgeIcon} {badgeText}
-    </span>
-  );
-}
-
-// Component for each PR item in the stack list
-interface PRItemProps {
-  pr: any;
-  index: number;
-  isSelected: boolean;
-  onSelect: (prNumber: number) => void;
-  onMerge: (prNumber: number) => void;
-  mergePending: boolean;
-  sortedPRs: any[];
-}
-
-function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs }: PRItemProps) {
-  const queryClient = useQueryClient();
-
-  // Calculate how many branches need to be merged (from base to current, excluding already merged)
-  const prsToMerge = sortedPRs.slice(0, index + 1).filter(p => !p.merged_at);
-  const branchesToMerge = prsToMerge.length;
-  const branchWord = branchesToMerge === 1 ? 'branch' : 'branches';
-
-  const statusColor = pr.draft
-    ? theme.statusDraft
-    : pr.merged_at
-    ? theme.statusMerged
-    : pr.state === 'closed'
-    ? theme.statusClosed
-    : theme.statusOpen;
-
-  // Check if this PR targets main (base of the stack)
-  const isBasePR = pr.base.ref === 'main' || pr.base.ref === 'master';
-  const isMerged = !!pr.merged_at;
-  const isClosed = pr.state === 'closed' && !isMerged;
-
-  // Determine merge button state and text by checking ALL PRs that need to be merged
-  let mergeButtonText = `⬇ Merge ${branchesToMerge} ${branchWord}`;
-  let mergeButtonDisabled = false;
-  let mergeButtonTooltip = '';
-  let canMerge = true;
-
-  if (mergePending) {
-    mergeButtonText = 'Merging...';
-    mergeButtonTooltip = `Merging ${branchesToMerge} ${branchWord}...`;
-    mergeButtonDisabled = true;
-    canMerge = false;
-  } else if (isMerged) {
-    mergeButtonText = '✓ Merged';
-    mergeButtonTooltip = `PR #${pr.number} has already been merged`;
-    mergeButtonDisabled = true;
-    canMerge = false;
-  } else if (isClosed) {
-    mergeButtonText = 'Closed';
-    mergeButtonTooltip = `PR #${pr.number} is closed and cannot be merged`;
-    mergeButtonDisabled = true;
-    canMerge = false;
-  } else {
-    // Check all PRs that need to be merged for blockers
-    for (const checkPr of prsToMerge) {
-      // Check if closed
-      if (checkPr.state === 'closed' && !checkPr.merged_at) {
-        mergeButtonText = 'Closed';
-        mergeButtonTooltip = `PR #${checkPr.number} is closed and must be reopened before merging`;
-        mergeButtonDisabled = true;
-        canMerge = false;
-        break;
-      }
-
-      // Check draft status
-      if (checkPr.draft) {
-        mergeButtonText = '⚠ Draft';
-        mergeButtonTooltip = `PR #${checkPr.number} is a draft and must be marked as ready for review before merging`;
-        mergeButtonDisabled = true;
-        canMerge = false;
-        break;
-      }
-
-      // Check merge conflicts
-      if (checkPr.mergeable === false) {
-        mergeButtonText = '⚠ Conflicts';
-        mergeButtonTooltip = `PR #${checkPr.number} has merge conflicts that must be resolved before merging`;
-        mergeButtonDisabled = true;
-        canMerge = false;
-        break;
-      }
-
-      // Check CI status for this PR
-      const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', checkPr.number, 'checks']);
-      if (checkRuns && checkRuns.length > 0) {
-        const failedChecks = checkRuns.filter((c) => c.conclusion === 'failure').length;
-        const inProgressChecks = checkRuns.filter((c) => c.status === 'in_progress').length;
-        const queuedChecks = checkRuns.filter((c) => c.status === 'queued').length;
-
-        if (failedChecks > 0) {
-          mergeButtonText = '⚠ CI Failed';
-          mergeButtonTooltip = `PR #${checkPr.number} has ${failedChecks} failing CI check${failedChecks > 1 ? 's' : ''}. Fix the failures before merging.`;
-          mergeButtonDisabled = true;
-          canMerge = false;
-          break;
-        }
-
-        if (inProgressChecks > 0 || queuedChecks > 0) {
-          mergeButtonText = '⟳ CI Running';
-          mergeButtonTooltip = `PR #${checkPr.number} has ${inProgressChecks + queuedChecks} CI check${inProgressChecks + queuedChecks > 1 ? 's' : ''} in progress. Wait for CI to complete before merging.`;
-          mergeButtonDisabled = true;
-          canMerge = false;
-          break;
-        }
-      }
-    }
-
-    // If no blockers found, ready to merge
-    if (canMerge) {
-      mergeButtonTooltip = `Click to merge ${branchesToMerge} ${branchWord} sequentially into their targets`;
-    }
-  }
-
-  return (
-    <div
-      key={pr.number}
-      className={`border rounded-lg transition-all relative ${
-        isSelected
-          ? `${theme.border} bg-everforest-bg2 border-everforest-green`
-          : `${theme.border}`
-      }`}
-    >
-      {/* Merge Button - Top Right */}
-      <div className="absolute top-3 right-3 z-10">
-        <div className="relative group">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (canMerge) {
-                onMerge(pr.number);
-              }
-            }}
-            disabled={mergeButtonDisabled}
-            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-              mergeButtonDisabled
-                ? 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
-                : 'bg-everforest-purple text-everforest-bg0 hover:bg-everforest-purple/90 shadow-sm'
-            }`}
-          >
-            {mergeButtonText}
-          </button>
-          {mergeButtonTooltip && (
-            <div className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-everforest-bg0 text-everforest-fg border border-everforest-bg4 rounded shadow-lg text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-              {mergeButtonTooltip}
-              <div className="absolute top-full right-4 -mt-1 border-4 border-transparent border-t-everforest-bg4"></div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <button
-        onClick={() => onSelect(pr.number)}
-        className={`w-full text-left p-3 pr-24 ${!isSelected && 'hover:bg-everforest-bg1'}`}
-      >
-        <div className="flex items-center gap-3">
-          <span className={`text-xs font-medium ${theme.textSecondary}`}>
-            #{index + 1}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
-                {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state}
-              </span>
-              <CIStatusBadge prNumber={pr.number} />
-              <span className={`font-medium ${theme.textPrimary} truncate`}>
-                #{pr.number} {pr.title}
-              </span>
-            </div>
-            <div className={`mt-1 text-xs ${theme.textSecondary} flex items-center gap-2 flex-wrap`}>
-              <span>{pr.head.ref} → {pr.base.ref}</span>
-              {isBasePR && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium bg-everforest-purple/20 text-everforest-purple`}>
-                  Base PR
-                </span>
-              )}
-              <a
-                href={pr.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`${theme.textLink} text-xs`}
-              >
-                GitHub →
-              </a>
-            </div>
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-}
 
 export function StackDetailPage() {
   const { stackId } = useParams<{ stackId: string }>();
@@ -396,6 +137,39 @@ export function StackDetailPage() {
 
   // Track comments section collapse state
   const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
+
+  // Track expanded files in diff view (files are expanded by default)
+  const [expandedFiles, setExpandedFiles] = useState<Set<string> | null>(null);
+
+  // Initialize all files as expanded when diff loads
+  useEffect(() => {
+    if (diff && expandedFiles === null) {
+      setExpandedFiles(new Set(diff.map(f => f.filename)));
+    }
+  }, [diff, expandedFiles]);
+
+  const toggleFileExpanded = (filename: string) => {
+    setExpandedFiles((prev) => {
+      if (!prev) return new Set([filename]);
+      const next = new Set(prev);
+      if (next.has(filename)) {
+        next.delete(filename);
+      } else {
+        next.add(filename);
+      }
+      return next;
+    });
+  };
+
+  const expandAllFiles = () => {
+    if (diff) {
+      setExpandedFiles(new Set(diff.map(f => f.filename)));
+    }
+  };
+
+  const collapseAllFiles = () => {
+    setExpandedFiles(new Set());
+  };
 
   // Build file tree from diff
   const buildFileTree = (files: GithubDiff[]): FileTreeNode[] => {
@@ -835,50 +609,30 @@ export function StackDetailPage() {
           </Link>
         </div>
 
-        {/* Stack Header */}
-        <div className={`${theme.card} mb-6`}>
-        <div className={`px-6 py-5 border-b ${theme.border}`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className={`text-2xl font-semibold ${theme.textPrimary}`}>{stack.name}</h1>
-              {stack.description && (
-                <p className={`mt-1 text-sm ${theme.textSecondary}`}>{stack.description}</p>
-              )}
-            </div>
-            <button
-              onClick={handleShareStack}
-              className={`ml-4 px-4 py-2 rounded text-sm font-medium transition-colors ${
-                isCopied
-                  ? 'bg-everforest-green text-everforest-bg0'
-                  : 'bg-everforest-blue text-everforest-bg0 hover:bg-everforest-blue/90'
-              }`}
-            >
-              {isCopied ? '✓ Copied!' : '📋 Share Stack'}
-            </button>
+        <div className="flex gap-6 mb-6">
+          {/* Left side - Stack Header and PR List */}
+          <div className="flex-1 min-w-0">
+            <StackHeader
+              stack={stack}
+              isCopied={isCopied}
+              onShareStack={handleShareStack}
+              sortedPRs={sortedPRs}
+              currentPRNumber={currentPRNumber}
+              onSelectPR={setSelectedPRNumber}
+              onMergePR={handleMergePR}
+              mergePending={mergePR.isPending}
+            />
           </div>
-        </div>
 
-        {/* PR Selection List */}
-        <div className="px-6 py-4">
-          <h2 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>
-            Pull Requests in Stack ({sortedPRs.length})
-          </h2>
-
-          <div className="space-y-2">
-            {sortedPRs.map((pr, index) => (
-              <PRItem
-                key={pr.number}
-                pr={pr}
-                index={index}
-                isSelected={pr.number === currentPRNumber}
-                onSelect={setSelectedPRNumber}
-                onMerge={handleMergePR}
-                mergePending={mergePR.isPending}
-                sortedPRs={sortedPRs}
-              />
-            ))}
-          </div>
-        </div>
+          {/* Right side - CI Status */}
+          {selectedPR && (
+            <CIStatusPanel
+              checkRuns={checkRuns}
+              checkRunsLoading={checkRunsLoading}
+              onRerunAll={() => rerunAllChecks.mutate()}
+              rerunPending={rerunAllChecks.isPending}
+            />
+          )}
         </div>
 
         {/* General Reviews (non-code-specific comments) */}
@@ -1117,100 +871,8 @@ export function StackDetailPage() {
       {/* Main Content Area with Sidebar */}
       {selectedPR && (
         <div className="flex gap-6">
-          {/* Left Sidebar - CI Status and File Tree */}
+          {/* Left Sidebar - File Tree */}
           <div className={`w-64 flex-shrink-0 ${theme.card} overflow-y-auto sticky top-6 self-start max-h-[calc(100vh-8rem)]`}>
-            {/* CI Status Section */}
-            <div className={`px-4 py-3 border-b ${theme.border}`}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className={`text-sm font-medium ${theme.textPrimary}`}>
-                  CI Status
-                </h3>
-                {checkRuns && checkRuns.length > 0 && (
-                  <button
-                    onClick={() => rerunAllChecks.mutate()}
-                    disabled={rerunAllChecks.isPending}
-                    className={`text-xs px-2 py-1 rounded ${theme.textPrimary} bg-everforest-green hover:bg-everforest-green/90 disabled:bg-everforest-bg3 disabled:text-everforest-grey0 disabled:cursor-not-allowed font-medium transition-colors`}
-                    title="Rerun all CI checks"
-                  >
-                    {rerunAllChecks.isPending ? '⟳ Rerunning...' : '⟳ Rerun All'}
-                  </button>
-                )}
-              </div>
-              {checkRunsLoading ? (
-                <div className="text-center py-4">
-                  <div className={`inline-block animate-spin rounded-full h-4 w-4 border-b-2 ${theme.spinner}`}></div>
-                </div>
-              ) : !checkRuns || checkRuns.length === 0 ? (
-                <p className={`text-xs ${theme.textMuted} text-center py-4`}>No CI checks</p>
-              ) : checkRuns.filter((check) => check.conclusion !== 'success').length === 0 ? (
-                <div className={`text-center py-4 px-2 rounded ${theme.successBox}`}>
-                  <p className={`text-xs ${theme.textSuccess} font-medium`}>
-                    ✓ All checks passed
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {checkRuns.filter((check) => check.conclusion !== 'success').map((check) => {
-                    const isSuccess = check.conclusion === 'success';
-                    const isFailure = check.conclusion === 'failure';
-                    const isInProgress = check.status === 'in_progress';
-                    const isQueued = check.status === 'queued';
-
-                    let statusColor = theme.textMuted;
-                    let statusIcon = '○';
-
-                    if (isSuccess) {
-                      statusColor = theme.textSuccess;
-                      statusIcon = '✓';
-                    } else if (isFailure) {
-                      statusColor = theme.textError;
-                      statusIcon = '✗';
-                    } else if (isInProgress) {
-                      statusColor = theme.textWarning;
-                      statusIcon = '⟳';
-                    } else if (isQueued) {
-                      statusColor = theme.textMuted;
-                      statusIcon = '◷';
-                    } else if (check.conclusion === 'cancelled') {
-                      statusColor = theme.textMuted;
-                      statusIcon = '⊘';
-                    } else if (check.conclusion === 'skipped') {
-                      statusColor = theme.textMuted;
-                      statusIcon = '⊝';
-                    }
-
-                    return (
-                      <div
-                        key={check.id}
-                        className={`p-2 rounded border ${theme.border} hover:bg-everforest-bg1 transition-colors`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className={`text-sm ${statusColor} flex-shrink-0 mt-0.5`}>
-                            {statusIcon}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-xs font-medium ${theme.textPrimary} truncate`} title={check.name}>
-                              {check.name}
-                            </div>
-                            {(check.html_url || check.details_url) && (
-                              <a
-                                href={check.html_url || check.details_url || '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`text-xs ${theme.textLink} mt-1 inline-block`}
-                              >
-                                Details →
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* Files Changed Section */}
             <div className={`px-4 py-3 border-b ${theme.border} sticky top-0 ${theme.bgSecondary} z-10`}>
               <h3 className={`text-sm font-medium ${theme.textPrimary}`}>
@@ -1275,9 +937,27 @@ export function StackDetailPage() {
 
           {/* File Changes */}
           <div className="px-6 py-5">
-            <h3 className={`text-base font-medium ${theme.textPrimary} mb-4`}>
-              Files Changed ({diff?.length || 0})
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-base font-medium ${theme.textPrimary}`}>
+                Files Changed ({diff?.length || 0})
+              </h3>
+              {diff && diff.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={expandAllFiles}
+                    className={`text-xs px-3 py-1 rounded ${theme.textPrimary} bg-everforest-bg3 hover:bg-everforest-bg4 transition-colors`}
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    onClick={collapseAllFiles}
+                    className={`text-xs px-3 py-1 rounded ${theme.textPrimary} bg-everforest-bg3 hover:bg-everforest-bg4 transition-colors`}
+                  >
+                    Collapse All
+                  </button>
+                </div>
+              )}
+            </div>
 
             {diffLoading ? (
               <div className="text-center py-8">
@@ -1298,9 +978,15 @@ export function StackDetailPage() {
                       className={`border ${theme.border} rounded-lg overflow-hidden scroll-mt-4`}
                     >
                       {/* File Header */}
-                      <div className={`${theme.bgSecondary} px-4 py-3 border-b ${theme.border}`}>
+                      <button
+                        onClick={() => toggleFileExpanded(file.filename)}
+                        className={`w-full ${theme.bgSecondary} px-4 py-3 border-b ${theme.border} hover:bg-everforest-bg3 transition-colors`}
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
+                            <span className={`text-xs ${theme.textSecondary}`}>
+                              {expandedFiles?.has(file.filename) ? '▼' : '▶'}
+                            </span>
                             <span
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 file.status === 'added'
@@ -1327,10 +1013,10 @@ export function StackDetailPage() {
                             <span className={theme.textError}>-{file.deletions}</span>
                           </div>
                         </div>
-                      </div>
+                      </button>
 
                       {/* Split Diff View */}
-                      {file.patch && (
+                      {file.patch && expandedFiles?.has(file.filename) && (
                         <div className="flex">
                           {/* Left Side - Original */}
                           <div className={`flex-1 border-r ${theme.border} ${theme.bgSecondary}`}>
@@ -1754,6 +1440,9 @@ export function StackDetailPage() {
         </div>
         </div>
       )}
+
+      {/* Extra scrolling space */}
+      <div className="h-[50vh]"></div>
     </div>
   );
 }
