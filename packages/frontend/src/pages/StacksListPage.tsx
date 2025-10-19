@@ -1,9 +1,12 @@
 import { useStacks } from '../hooks/useStacks';
+import { useMultiRepoStacks } from '../hooks/useMultiRepoStacks';
 import { Link } from 'react-router-dom';
 import { theme } from '../lib/theme';
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { configAPI } from '../lib/api';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { configAPI, stacksAPI } from '../lib/api';
+
+const REPO_PREFERENCE_KEY = 'stacksmith:selectedRepo';
 
 export function StacksListPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'my' | 'review'>('all');
@@ -12,15 +15,82 @@ export function StacksListPage() {
   const [reviewPage, setReviewPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('all');
-  const [selectedRepo, setSelectedRepo] = useState<string>('all');
-  const itemsPerPage = 10;
 
-  const { data: stacks, isLoading, error } = useStacks(selectedRepo !== 'all' ? selectedRepo : undefined);
+  const queryClient = useQueryClient();
+
+  // Fetch config first to get available repos
   const { data: config } = useQuery({
     queryKey: ['config', 'github'],
     queryFn: () => configAPI.getGithub(),
     retry: false,
   });
+
+  // Get available repos from config
+  const availableRepos = useMemo(() => {
+    if (!config?.repos) return [];
+    return config.repos.map((r: { owner: string; repo: string }) => `${r.owner}/${r.repo}`);
+  }, [config?.repos]);
+
+  // Initialize selectedRepo with smart defaults
+  const [selectedRepo, setSelectedRepo] = useState<string>(() => {
+    // Try to get from localStorage
+    const saved = localStorage.getItem(REPO_PREFERENCE_KEY);
+    return saved || 'auto'; // 'auto' means we'll set it once config loads
+  });
+
+  // Update selectedRepo once config loads if it's still on 'auto'
+  useEffect(() => {
+    if (selectedRepo === 'auto' && availableRepos.length > 0) {
+      // Check if saved preference is still valid
+      const saved = localStorage.getItem(REPO_PREFERENCE_KEY);
+      if (saved && saved !== 'auto' && availableRepos.includes(saved)) {
+        setSelectedRepo(saved);
+      } else {
+        // Default to first repo
+        setSelectedRepo(availableRepos[0]);
+      }
+    }
+  }, [availableRepos, selectedRepo]);
+
+  // Save repo preference to localStorage when it changes
+  useEffect(() => {
+    if (selectedRepo && selectedRepo !== 'auto') {
+      localStorage.setItem(REPO_PREFERENCE_KEY, selectedRepo);
+    }
+  }, [selectedRepo]);
+
+  // Prefetch other repos in the background after initial load
+  useEffect(() => {
+    if (availableRepos.length > 1 && selectedRepo !== 'all' && selectedRepo !== 'auto') {
+      // Wait a bit for the initial load to complete, then prefetch other repos
+      const timer = setTimeout(() => {
+        availableRepos.forEach((repo) => {
+          if (repo !== selectedRepo) {
+            queryClient.prefetchQuery({
+              queryKey: ['stacks', { repo }],
+              queryFn: () => stacksAPI.list(repo),
+            });
+          }
+        });
+      }, 1000); // Wait 1 second after initial render
+
+      return () => clearTimeout(timer);
+    }
+  }, [availableRepos, selectedRepo, queryClient]);
+
+  const itemsPerPage = 10;
+
+  // Use different hooks depending on whether we're viewing all repos or a single repo
+  const singleRepoResult = useStacks(
+    selectedRepo !== 'all' && selectedRepo !== 'auto' ? selectedRepo : undefined
+  );
+  const multiRepoResult = useMultiRepoStacks(
+    availableRepos,
+    selectedRepo === 'all'
+  );
+
+  // Choose which result to use based on selectedRepo
+  const { data: stacks, isLoading, error } = selectedRepo === 'all' ? multiRepoResult : singleRepoResult;
 
   // Get unique authors for filter - must be called before any returns
   const authors = useMemo(() => {
@@ -31,12 +101,6 @@ export function StacksListPage() {
     });
     return Array.from(uniqueAuthors).sort();
   }, [stacks]);
-
-  // Get available repos from config
-  const availableRepos = useMemo(() => {
-    if (!config?.repos) return [];
-    return config.repos.map((r: { owner: string; repo: string }) => `${r.owner}/${r.repo}`);
-  }, [config?.repos]);
 
   // Fuzzy search and filter logic - must be called before any returns
   const filteredStacks = useMemo(() => {
@@ -72,20 +136,52 @@ export function StacksListPage() {
   // Filter stacks for current user
   const myStacks = useMemo(() => {
     if (!stacks || !config?.currentUser) return [];
-    return stacks.filter(stack =>
+    let filtered = stacks.filter(stack =>
       stack.prs.some(pr => pr.user.login === config.currentUser)
     );
-  }, [stacks, config?.currentUser]);
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(stack => {
+        // Search in stack name
+        if (stack.name.toLowerCase().includes(query)) return true;
+
+        // Search in any PR title
+        return stack.prs.some(pr =>
+          pr.title.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    return filtered;
+  }, [stacks, config?.currentUser, searchQuery]);
 
   // Filter stacks where current user is requested as reviewer
   const reviewStacks = useMemo(() => {
     if (!stacks || !config?.currentUser) return [];
-    return stacks.filter(stack =>
+    let filtered = stacks.filter(stack =>
       stack.prs.some(pr =>
         pr.requested_reviewers.some(reviewer => reviewer.login === config.currentUser)
       )
     );
-  }, [stacks, config?.currentUser]);
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(stack => {
+        // Search in stack name
+        if (stack.name.toLowerCase().includes(query)) return true;
+
+        // Search in any PR title
+        return stack.prs.some(pr =>
+          pr.title.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    return filtered;
+  }, [stacks, config?.currentUser, searchQuery]);
 
   // Calculate pagination for My PRs
   const totalMyStacks = myStacks.length;
@@ -332,6 +428,84 @@ export function StacksListPage() {
       {/* My PRs Tab Content */}
       {activeTab === 'my' && config?.currentUser && myStacks.length > 0 && (
         <div>
+          {/* Search and Filter Controls for My PRs */}
+          <div className="mb-6 flex flex-col sm:flex-row gap-4">
+            {/* Search Input */}
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg
+                    className={`h-5 w-5 ${theme.textMuted}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by stack or PR title..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setMyPage(1); // Reset to first page on search
+                  }}
+                  className={`block w-full pl-10 pr-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+                />
+              </div>
+            </div>
+
+            {/* Repo Filter (only show if multiple repos configured) */}
+            {availableRepos.length > 1 && (
+              <div className="sm:w-64 relative">
+                <select
+                  value={selectedRepo === 'auto' ? availableRepos[0] || '' : selectedRepo}
+                  onChange={(e) => {
+                    setSelectedRepo(e.target.value);
+                    setMyPage(1); // Reset to first page on filter change
+                  }}
+                  className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+                >
+                  <option value="all">
+                    All Repositories
+                    {selectedRepo === 'all' && multiRepoResult.isLoading ? ' (Loading...)' : ''}
+                  </option>
+                  {availableRepos.map(repo => (
+                    <option key={repo} value={repo}>
+                      {repo}
+                    </option>
+                  ))}
+                </select>
+                {/* Show loading spinner next to dropdown when fetching multiple repos */}
+                {selectedRepo === 'all' && multiRepoResult.isLoading && (
+                  <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+                    <div className={`inline-block animate-spin rounded-full h-4 w-4 border-b-2 ${theme.spinner}`}></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Clear Filters Button */}
+            {(searchQuery || selectedRepo !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedRepo('all');
+                  setMyPage(1);
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-md ${theme.buttonSecondary} ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
           {renderStacksTable(paginatedMyStacks)}
 
           {/* My PRs Pagination Controls */}
@@ -387,6 +561,84 @@ export function StacksListPage() {
       {/* Review Requested Tab Content */}
       {activeTab === 'review' && config?.currentUser && reviewStacks.length > 0 && (
         <div>
+          {/* Search and Filter Controls for Review Requested */}
+          <div className="mb-6 flex flex-col sm:flex-row gap-4">
+            {/* Search Input */}
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg
+                    className={`h-5 w-5 ${theme.textMuted}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by stack or PR title..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setReviewPage(1); // Reset to first page on search
+                  }}
+                  className={`block w-full pl-10 pr-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+                />
+              </div>
+            </div>
+
+            {/* Repo Filter (only show if multiple repos configured) */}
+            {availableRepos.length > 1 && (
+              <div className="sm:w-64 relative">
+                <select
+                  value={selectedRepo === 'auto' ? availableRepos[0] || '' : selectedRepo}
+                  onChange={(e) => {
+                    setSelectedRepo(e.target.value);
+                    setReviewPage(1); // Reset to first page on filter change
+                  }}
+                  className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+                >
+                  <option value="all">
+                    All Repositories
+                    {selectedRepo === 'all' && multiRepoResult.isLoading ? ' (Loading...)' : ''}
+                  </option>
+                  {availableRepos.map(repo => (
+                    <option key={repo} value={repo}>
+                      {repo}
+                    </option>
+                  ))}
+                </select>
+                {/* Show loading spinner next to dropdown when fetching multiple repos */}
+                {selectedRepo === 'all' && multiRepoResult.isLoading && (
+                  <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+                    <div className={`inline-block animate-spin rounded-full h-4 w-4 border-b-2 ${theme.spinner}`}></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Clear Filters Button */}
+            {(searchQuery || selectedRepo !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedRepo('all');
+                  setReviewPage(1);
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-md ${theme.buttonSecondary} ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
           {renderStacksTable(paginatedReviewStacks)}
 
           {/* Review Requested Pagination Controls */}
@@ -475,27 +727,6 @@ export function StacksListPage() {
           </div>
         </div>
 
-        {/* Repo Filter (only show if multiple repos configured) */}
-        {availableRepos.length > 1 && (
-          <div className="sm:w-64">
-            <select
-              value={selectedRepo}
-              onChange={(e) => {
-                setSelectedRepo(e.target.value);
-                setPage(1); // Reset to first page on filter change
-              }}
-              className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
-            >
-              <option value="all">All Repositories</option>
-              {availableRepos.map(repo => (
-                <option key={repo} value={repo}>
-                  {repo}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Author Filter */}
         <div className="sm:w-64">
           <select
@@ -515,6 +746,36 @@ export function StacksListPage() {
           </select>
         </div>
 
+        {/* Repo Filter (only show if multiple repos configured) */}
+        {availableRepos.length > 1 && (
+          <div className="sm:w-64 relative">
+            <select
+              value={selectedRepo === 'auto' ? availableRepos[0] || '' : selectedRepo}
+              onChange={(e) => {
+                setSelectedRepo(e.target.value);
+                setPage(1); // Reset to first page on filter change
+              }}
+              className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+            >
+              <option value="all">
+                All Repositories
+                {selectedRepo === 'all' && multiRepoResult.isLoading ? ' (Loading...)' : ''}
+              </option>
+              {availableRepos.map(repo => (
+                <option key={repo} value={repo}>
+                  {repo}
+                </option>
+              ))}
+            </select>
+            {/* Show loading spinner next to dropdown when fetching multiple repos */}
+            {selectedRepo === 'all' && multiRepoResult.isLoading && (
+              <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
+                <div className={`inline-block animate-spin rounded-full h-4 w-4 border-b-2 ${theme.spinner}`}></div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Clear Filters Button */}
         {(searchQuery || selectedAuthor !== 'all' || selectedRepo !== 'all') && (
           <button
@@ -530,6 +791,35 @@ export function StacksListPage() {
           </button>
         )}
       </div>
+
+      {/* Multi-repo loading status */}
+      {selectedRepo === 'all' && multiRepoResult.isLoading && (
+        <div className={`mb-4 p-3 border ${theme.border} rounded-lg ${theme.bgSecondary}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`inline-block animate-spin rounded-full h-4 w-4 border-b-2 ${theme.spinner}`}></div>
+            <span className={`text-sm ${theme.textSecondary}`}>Loading repositories...</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {multiRepoResult.repoStates && multiRepoResult.repoStates.map((state) => (
+              <span
+                key={state.repo}
+                className={`text-xs px-2 py-1 rounded ${
+                  state.isSuccess
+                    ? 'bg-everforest-green/20 text-everforest-green'
+                    : state.error
+                    ? 'bg-everforest-red/20 text-everforest-red'
+                    : 'bg-everforest-bg3 text-everforest-grey0'
+                }`}
+              >
+                {state.repo}
+                {state.isSuccess && ' ✓'}
+                {state.error && ' ✗'}
+                {state.isLoading && ' ...'}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* No Results Message */}
       {filteredStacks.length === 0 && (searchQuery || selectedAuthor !== 'all' || selectedRepo !== 'all') && (

@@ -112,7 +112,7 @@ const everforestTheme = {
     color: '#d699b6', // everforest-purple
   },
   'hljs-meta': {
-    color: '#e69875', // everforest-orange
+    color: '#7fbbb3', // everforest-aqua
   },
   'hljs-meta-string': {
     color: '#a7c080', // everforest-green
