@@ -394,6 +394,9 @@ export function StackDetailPage() {
   // Track copy to clipboard state
   const [isCopied, setIsCopied] = useState(false);
 
+  // Track comments section collapse state
+  const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
+
   // Build file tree from diff
   const buildFileTree = (files: GithubDiff[]): FileTreeNode[] => {
     const root: Record<string, FileTreeNodeInternal> = {};
@@ -825,14 +828,15 @@ export function StackDetailPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <Link to="/" className={`text-sm ${theme.textLink}`}>
-          ← Back to stacks
-        </Link>
-      </div>
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-6">
+          <Link to="/" className={`text-sm ${theme.textLink}`}>
+            ← Back to stacks
+          </Link>
+        </div>
 
-      {/* Stack Header */}
-      <div className={`${theme.card} mb-6`}>
+        {/* Stack Header */}
+        <div className={`${theme.card} mb-6`}>
         <div className={`px-6 py-5 border-b ${theme.border}`}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -875,11 +879,11 @@ export function StackDetailPage() {
             ))}
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* General Reviews (non-code-specific comments) */}
-      {selectedPR && generalReviews.length > 0 && (
-        <div className={`${theme.card} mb-6`}>
+        {/* General Reviews (non-code-specific comments) */}
+        {selectedPR && generalReviews.length > 0 && (
+          <div className={`${theme.card} mb-6`}>
           <div className={`px-6 py-4 border-b ${theme.border}`}>
             <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
               Reviews ({generalReviews.length})
@@ -932,15 +936,25 @@ export function StackDetailPage() {
             ))}
           </div>
         </div>
-      )}
+        )}
 
-      {/* PR-Level Comments */}
-      {selectedPR && (
-        <div className={`${theme.card} mb-6`}>
+        {/* PR-Level Comments */}
+        {selectedPR && (
+          <div className={`${theme.card} mb-6`}>
           <div className={`px-6 py-4 border-b ${theme.border} flex items-center justify-between`}>
-            <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
-              Comments ({issueComments?.length || 0})
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
+                Comments ({issueComments?.length || 0})
+              </h2>
+              {issueComments && issueComments.length > 0 && (
+                <button
+                  onClick={() => setIsCommentsExpanded(!isCommentsExpanded)}
+                  className={`text-xs px-2 py-1 rounded ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
+                >
+                  {isCommentsExpanded ? '▼ Collapse' : '▶ Expand'}
+                </button>
+              )}
+            </div>
             {!isAddingPRComment && (
               <button
                 onClick={() => setIsAddingPRComment(true)}
@@ -951,7 +965,7 @@ export function StackDetailPage() {
             )}
           </div>
           <div className="px-6 py-4 space-y-4">
-            {issueComments && issueComments.length > 0 && issueComments.map((comment) => (
+            {issueComments && issueComments.length > 0 && isCommentsExpanded && issueComments.map((comment) => (
               <div key={comment.id} className="border-l-2 border-everforest-aqua pl-4">
                 <div className="flex items-start gap-3">
                   <img
@@ -1047,6 +1061,13 @@ export function StackDetailPage() {
               </div>
             ))}
 
+            {/* Show indicator when comments are collapsed */}
+            {issueComments && issueComments.length > 0 && !isCommentsExpanded && (
+              <div className={`text-center py-2 ${theme.textMuted} text-sm`}>
+                {issueComments.length} comment{issueComments.length !== 1 ? 's' : ''} hidden. Click "Expand" to view all.
+              </div>
+            )}
+
             {isAddingPRComment && (
               <div className={`p-4 border ${theme.border} rounded-lg ${theme.bgSecondary}`}>
                 <textarea
@@ -1090,13 +1111,14 @@ export function StackDetailPage() {
             )}
           </div>
         </div>
-      )}
+        )}
+      </div>
 
       {/* Main Content Area with Sidebar */}
       {selectedPR && (
         <div className="flex gap-6">
           {/* Left Sidebar - CI Status and File Tree */}
-          <div className={`w-80 flex-shrink-0 ${theme.card} overflow-y-auto sticky top-6 self-start max-h-[calc(100vh-8rem)]`}>
+          <div className={`w-64 flex-shrink-0 ${theme.card} overflow-y-auto sticky top-6 self-start max-h-[calc(100vh-8rem)]`}>
             {/* CI Status Section */}
             <div className={`px-4 py-3 border-b ${theme.border}`}>
               <div className="flex items-center justify-between mb-3">
@@ -1120,9 +1142,15 @@ export function StackDetailPage() {
                 </div>
               ) : !checkRuns || checkRuns.length === 0 ? (
                 <p className={`text-xs ${theme.textMuted} text-center py-4`}>No CI checks</p>
+              ) : checkRuns.filter((check) => check.conclusion !== 'success').length === 0 ? (
+                <div className={`text-center py-4 px-2 rounded ${theme.successBox}`}>
+                  <p className={`text-xs ${theme.textSuccess} font-medium`}>
+                    ✓ All checks passed
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {checkRuns.map((check) => {
+                  {checkRuns.filter((check) => check.conclusion !== 'success').map((check) => {
                     const isSuccess = check.conclusion === 'success';
                     const isFailure = check.conclusion === 'failure';
                     const isInProgress = check.status === 'in_progress';
@@ -1309,7 +1337,7 @@ export function StackDetailPage() {
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Original</span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div>
                               {leftLines.map((line, index) => {
                                 const isRemoved = line.type === 'removed';
                                 const canComment = isRemoved && line.lineNum !== null;
@@ -1351,7 +1379,7 @@ export function StackDetailPage() {
                                       <span className={`w-12 flex-shrink-0 px-2 py-0.5 text-right select-none ${theme.textMuted}`}>
                                         {line.lineNum ?? ''}
                                       </span>
-                                      <span className={`flex-1 px-2 py-0.5 ${
+                                      <span className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${
                                         isRemoved ? 'text-everforest-red' :
                                         line.type === 'context' && line.content.startsWith('@@') ? 'text-everforest-blue' :
                                         line.type === 'empty' ? theme.textMuted :
@@ -1517,7 +1545,7 @@ export function StackDetailPage() {
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Modified</span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div>
                               {rightLines.map((line, index) => {
                                 const isAdded = line.type === 'added';
                                 const canComment = isAdded && line.lineNum !== null;
@@ -1555,7 +1583,7 @@ export function StackDetailPage() {
                                       <span className={`w-12 flex-shrink-0 px-2 py-0.5 text-right select-none ${theme.textMuted}`}>
                                         {line.lineNum ?? ''}
                                       </span>
-                                      <span className={`flex-1 px-2 py-0.5 ${
+                                      <span className={`flex-1 px-2 py-0.5 whitespace-pre-wrap break-all ${
                                         isAdded ? 'text-everforest-green' :
                                         line.type === 'context' && line.content.startsWith('@@') ? 'text-everforest-blue' :
                                         line.type === 'empty' ? theme.textMuted :

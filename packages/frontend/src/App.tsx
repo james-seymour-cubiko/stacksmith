@@ -16,6 +16,8 @@ const queryClient = new QueryClient({
 function Navigation() {
   const location = useLocation();
 
+  const isStackDetailPage = location.pathname.startsWith('/stacks/');
+
   const isActive = (path: string) => {
     if (path === '/' || path === '/stacks') {
       return location.pathname === '/' || location.pathname.startsWith('/stacks');
@@ -33,7 +35,7 @@ function Navigation() {
 
   return (
     <nav className="bg-everforest-bg1 border-b border-everforest-bg3">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={`${isStackDetailPage ? 'max-w-[95%]' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8`}>
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
@@ -54,20 +56,28 @@ function Navigation() {
   );
 }
 
+function MainContent() {
+  const location = useLocation();
+  const isStackDetailPage = location.pathname.startsWith('/stacks/');
+
+  return (
+    <main className={`${isStackDetailPage ? 'max-w-[95%]' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
+      <Routes>
+        <Route path="/" element={<StacksListPage />} />
+        <Route path="/stacks/:stackId" element={<StackDetailPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Routes>
+    </main>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <div className="min-h-screen bg-everforest-bg0">
           <Navigation />
-
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <Routes>
-              <Route path="/" element={<StacksListPage />} />
-              <Route path="/stacks/:stackId" element={<StackDetailPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
-          </main>
+          <MainContent />
         </div>
       </BrowserRouter>
     </QueryClientProvider>
