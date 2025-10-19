@@ -104,6 +104,21 @@ export function StackDetailPage() {
   // Sort PRs by stack order
   const sortedPRs = stack ? [...stack.prs].sort((a, b) => a.stackOrder - b.stackOrder) : [];
 
+  // Prefetch check runs for all PRs in the stack
+  useEffect(() => {
+    if (sortedPRs.length > 0 && owner && repo) {
+      sortedPRs.forEach(pr => {
+        queryClient.prefetchQuery({
+          queryKey: ['prs', owner, repo, pr.number, 'checks'],
+          queryFn: async () => {
+            const { prsAPI } = await import('../lib/api');
+            return prsAPI.getCheckRuns(owner, repo, pr.number);
+          },
+        });
+      });
+    }
+  }, [sortedPRs, owner, repo, queryClient]);
+
   // Redirect to stacks page if base PR is already merged
   useEffect(() => {
     if (stack && sortedPRs.length > 0) {
@@ -774,6 +789,9 @@ export function StackDetailPage() {
               onSelectPR={setSelectedPRNumber}
               onMergePR={handleMergePR}
               mergePending={mergePR.isPending}
+              currentUser={config?.currentUser}
+              owner={owner!}
+              repo={repo!}
             />
           </div>
 

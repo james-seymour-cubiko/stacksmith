@@ -27,8 +27,8 @@ export function ReviewStatusPanel({
   const [isAddingReviewer, setIsAddingReviewer] = useState(false);
   const [reviewerUsername, setReviewerUsername] = useState('');
 
-  // Compute status for each requested reviewer
-  const getReviewerStatus = (reviewer: GithubUser): ReviewerWithStatus => {
+  // Compute status for each reviewer
+  const getReviewerStatus = (reviewer: GithubUser, isRequested: boolean): ReviewerWithStatus => {
     if (!reviews) {
       return { user: reviewer, status: 'PENDING' };
     }
@@ -43,6 +43,17 @@ export function ReviewStatusPanel({
     }
 
     const latestReview = userReviews[0];
+
+    // If they have a review AND are in requested_reviewers, show as re-requested
+    if (isRequested) {
+      return {
+        user: reviewer,
+        status: 'PENDING',
+        reviewUrl: latestReview.html_url,
+        submittedAt: latestReview.submitted_at,
+      };
+    }
+
     return {
       user: reviewer,
       status: latestReview.state,
@@ -52,7 +63,7 @@ export function ReviewStatusPanel({
   };
 
   // Get all reviewers (requested + those who have reviewed)
-  const requestedReviewers = selectedPR.requested_reviewers.map(getReviewerStatus);
+  const requestedReviewers = selectedPR.requested_reviewers.map(r => getReviewerStatus(r, true));
 
   // Find reviewers who submitted reviews but weren't requested
   const unrequestedReviewers: ReviewerWithStatus[] = [];
@@ -61,6 +72,10 @@ export function ReviewStatusPanel({
     const reviewerLogins = new Set<string>();
 
     reviews.forEach((review) => {
+      // Ignore reviews from the author of the PR
+      if (review.user.login === selectedPR.user.login) return;
+
+
       if (!requestedLogins.has(review.user.login) && !reviewerLogins.has(review.user.login)) {
         reviewerLogins.add(review.user.login);
         unrequestedReviewers.push({
@@ -176,16 +191,28 @@ export function ReviewStatusPanel({
                       <div className={`text-xs ${theme.textMuted} mt-0.5`}>
                         {statusDisplay.label}
                       </div>
-                      {reviewer.reviewUrl && (
-                        <a
-                          href={reviewer.reviewUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`text-xs ${theme.textLink} mt-1 inline-block`}
-                        >
-                          View review →
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        {reviewer.reviewUrl && (
+                          <a
+                            href={reviewer.reviewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`text-xs ${theme.textLink}`}
+                          >
+                            View review →
+                          </a>
+                        )}
+                        {reviewer.status !== 'PENDING' && (
+                          <button
+                            onClick={() => onRequestReviewers([reviewer.user.login])}
+                            disabled={requestReviewersPending}
+                            className={`text-xs ${theme.textMuted} hover:text-everforest-green disabled:opacity-50`}
+                            title="Re-request review"
+                          >
+                            ⟳ Re-request
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

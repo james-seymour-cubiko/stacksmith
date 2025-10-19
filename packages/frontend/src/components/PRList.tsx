@@ -10,12 +10,15 @@ interface PRItemProps {
   onMerge: (prNumber: number) => void;
   mergePending: boolean;
   sortedPRs: any[];
+  currentUser?: string;
+  owner: string;
+  repo: string;
 }
 
 // Hook to get CI status for a PR
-function useCIStatus(prNumber: number) {
+function useCIStatus(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
-  const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', prNumber, 'checks']);
+  const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']);
 
   const failedChecks = checkRuns?.filter((c) => c.conclusion === 'failure').length || 0;
   const inProgressChecks = checkRuns?.filter((c) => c.status === 'in_progress').length || 0;
@@ -38,8 +41,8 @@ function useCIStatus(prNumber: number) {
 }
 
 // Component to display CI status badge for a PR
-function CIStatusBadge({ prNumber }: { prNumber: number }) {
-  const ciStatus = useCIStatus(prNumber);
+function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string; prNumber: number }) {
+  const ciStatus = useCIStatus(owner, repo, prNumber);
 
   if (ciStatus.isLoading) {
     return (
@@ -82,7 +85,7 @@ function CIStatusBadge({ prNumber }: { prNumber: number }) {
   );
 }
 
-function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs }: PRItemProps) {
+function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo }: PRItemProps) {
   const queryClient = useQueryClient();
 
   // Calculate how many branches need to be merged (from base to current, excluding already merged)
@@ -103,13 +106,21 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
   const isMerged = !!pr.merged_at;
   const isClosed = pr.state === 'closed' && !isMerged;
 
+  // Check if current user is the author of this PR
+  const isAuthor = currentUser && pr.user.login === currentUser;
+
   // Determine merge button state and text by checking ALL PRs that need to be merged
   let mergeButtonText = `⬇ Merge ${branchesToMerge} ${branchWord}`;
   let mergeButtonDisabled = false;
   let mergeButtonTooltip = '';
   let canMerge = true;
 
-  if (mergePending) {
+  if (!isAuthor) {
+    mergeButtonText = '⚠ Not Author';
+    mergeButtonTooltip = `Only the PR author (${pr.user.login}) can merge this PR`;
+    mergeButtonDisabled = true;
+    canMerge = false;
+  } else if (mergePending) {
     mergeButtonText = 'Merging...';
     mergeButtonTooltip = `Merging ${branchesToMerge} ${branchWord}...`;
     mergeButtonDisabled = true;
@@ -155,7 +166,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
       }
 
       // Check CI status for this PR
-      const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', checkPr.number, 'checks']);
+      const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, checkPr.number, 'checks']);
       if (checkRuns && checkRuns.length > 0) {
         const failedChecks = checkRuns.filter((c) => c.conclusion === 'failure').length;
         const inProgressChecks = checkRuns.filter((c) => c.status === 'in_progress').length;
@@ -235,7 +246,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                 {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Open'}
               </span>
-              <CIStatusBadge prNumber={pr.number} />
+              <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               <span className={`font-medium ${theme.textPrimary} truncate`}>
                 #{pr.number} {pr.title}
               </span>
@@ -270,9 +281,12 @@ interface PRListProps {
   onSelectPR: (prNumber: number) => void;
   onMergePR: (prNumber: number) => void;
   mergePending: boolean;
+  currentUser?: string;
+  owner: string;
+  repo: string;
 }
 
-export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, mergePending }: PRListProps) {
+export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, mergePending, currentUser, owner, repo }: PRListProps) {
   return (
     <div className="px-6 py-4">
       <h2 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>
@@ -290,6 +304,9 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
             onMerge={onMergePR}
             mergePending={mergePending}
             sortedPRs={sortedPRs}
+            currentUser={currentUser}
+            owner={owner}
+            repo={repo}
           />
         ))}
       </div>

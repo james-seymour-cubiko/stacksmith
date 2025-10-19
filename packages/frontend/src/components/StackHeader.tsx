@@ -11,6 +11,9 @@ interface StackHeaderProps {
   onSelectPR: (prNumber: number) => void;
   onMergePR: (prNumber: number) => void;
   mergePending: boolean;
+  currentUser?: string;
+  owner: string;
+  repo: string;
 }
 
 export function StackHeader({
@@ -21,7 +24,10 @@ export function StackHeader({
   currentPRNumber,
   onSelectPR,
   onMergePR,
-  mergePending
+  mergePending,
+  currentUser,
+  owner,
+  repo
 }: StackHeaderProps) {
   return (
     <div className={`${theme.card} h-full`}>
@@ -52,6 +58,9 @@ export function StackHeader({
         onSelectPR={onSelectPR}
         onMergePR={onMergePR}
         mergePending={mergePending}
+        currentUser={currentUser}
+        owner={owner}
+        repo={repo}
       />
     </div>
   );

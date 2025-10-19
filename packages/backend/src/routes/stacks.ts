@@ -83,9 +83,12 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
       try {
         service = githubServiceManager.getService(owner, repo);
       } catch (error: any) {
+        // Log available repos for debugging
+        const availableRepos = githubServiceManager.listRepos();
+        console.error(`Failed to get service for ${owner}/${repo}. Available repos:`, availableRepos);
         return reply.code(404).send({
           error: 'Not Found',
-          message: error.message,
+          message: `${error.message}. Available repositories: ${availableRepos.map(r => `${r.owner}/${r.repo}`).join(', ')}`,
           statusCode: 404,
         });
       }
