@@ -509,7 +509,7 @@ export function StackDetailPage() {
     });
 
     // Link to the overall stack in this app using localhost
-    const stackURL = `http://localhost:5173/stacks/${stack.id}`; 
+    const stackURL = `http://localhost:5173/stacks/${owner}/${repo}/${stack.id}`; 
 
     htmlLinks += `<br><a href="${stackURL}">Local Stacksmith URL</a>`;
     plainTextContent += `Local Stacksmith URL: ${stackURL}\n`;
