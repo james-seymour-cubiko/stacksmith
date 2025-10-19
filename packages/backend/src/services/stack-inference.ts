@@ -4,8 +4,11 @@ import type { GithubPR, Stack, StackWithPRs, StackedPR } from '@review-app/share
  * Infer stacks from GitHub PRs based on their branch relationships.
  * A stack is formed when PRs are chained together where one PR's head branch
  * is another PR's base branch.
+ * @param allPRs Array of pull requests
+ * @param repoOwner Repository owner
+ * @param repoName Repository name
  */
-export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
+export function inferStacksFromPRs(allPRs: GithubPR[], repoOwner: string, repoName: string): StackWithPRs[] {
   // Build a map of branch name to PR for quick lookup
   const branchToPR = new Map<string, GithubPR>();
   for (const pr of allPRs) {
@@ -48,7 +51,7 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
     }
 
     // Create a stack for all PRs (including single PRs)
-    const stackId = generateStackId(chain);
+    const stackId = generateStackId(chain, repoOwner, repoName);
     const stackName = generateStackName(chain);
 
     // Convert to StackedPRs with order information
@@ -57,6 +60,8 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
       stackOrder: index,
       stackId,
       stackName,
+      repoOwner,
+      repoName,
     }));
 
     stacks.push({
@@ -68,6 +73,8 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
       created_at: chain[0].created_at,
       // Find updated at of all PRs in the stack
       updated_at: new Date(Math.max(...chain.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
+      repoOwner,
+      repoName,
       prs: stackedPRs,
     });
   }
@@ -77,11 +84,14 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
 
 /**
  * Generate a unique stack ID based on the PRs in the stack
+ * For multi-repo support, include repo identifier in the stack ID
  */
-function generateStackId(prs: GithubPR[]): string {
+function generateStackId(prs: GithubPR[], repoOwner: string, repoName: string): string {
   // Use the root PR's head branch as the base for the ID
   const rootBranch = prs[0].head.ref;
-  return rootBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const branchId = rootBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  // Include repo in ID to ensure uniqueness across repos
+  return `${repoOwner}-${repoName}-${branchId}`;
 }
 
 /**
@@ -109,6 +119,8 @@ export function stackWithPRsToStack(stackWithPRs: StackWithPRs): Stack {
     description: stackWithPRs.description,
     created_at: stackWithPRs.created_at,
     updated_at: stackWithPRs.updated_at,
+    repoOwner: stackWithPRs.repoOwner,
+    repoName: stackWithPRs.repoName,
     prs: stackWithPRs.prs.map((pr) => ({
       number: pr.number,
       order: pr.stackOrder,

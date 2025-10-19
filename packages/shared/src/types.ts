@@ -114,6 +114,11 @@ export interface GithubCheckRun {
  * Stack-specific types
  */
 
+export interface RepoIdentifier {
+  owner: string;
+  repo: string;
+}
+
 export interface StackPR {
   number: number;
   order: number; // Position in stack (0 = base, higher = depends on lower)
@@ -126,6 +131,8 @@ export interface Stack {
   prs: StackPR[];
   created_at: string;
   updated_at: string;
+  repoOwner: string;
+  repoName: string;
 }
 
 export interface StackMetadata {
@@ -141,6 +148,8 @@ export interface StackedPR extends GithubPR {
   stackOrder: number;
   stackId: string;
   stackName: string;
+  repoOwner: string;
+  repoName: string;
 }
 
 export interface StackWithPRs extends Omit<Stack, 'prs'> {
@@ -175,6 +184,11 @@ export interface GithubConfig {
   owner: string;
   repo: string;
   token?: string; // May be omitted in responses for security
+  currentUser?: string; // GitHub username of the current user
+}
+
+export interface MultiRepoConfig {
+  repos: RepoIdentifier[];
   currentUser?: string; // GitHub username of the current user
 }
 

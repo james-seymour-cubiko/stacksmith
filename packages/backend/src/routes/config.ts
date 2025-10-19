@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { githubService } from '../services/github.js';
+import { githubServiceManager } from '../services/github-manager.js';
 import { ConfigureGithubSchema } from '../schemas/index.js';
 
 export const configRoutes: FastifyPluginAsync = async (server) => {
@@ -17,7 +17,7 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
       },
     },
     async (_request, reply) => {
-      if (!githubService.isConfigured()) {
+      if (!githubServiceManager.isConfigured()) {
         return reply.code(503).send({
           error: 'Service Unavailable',
           message: 'GitHub service not configured',
@@ -25,7 +25,7 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
         });
       }
 
-      return githubService.getConfig();
+      return githubServiceManager.getConfig();
     }
   );
 

@@ -8,7 +8,8 @@ import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fas
 import { stackRoutes } from './routes/stacks.js';
 import { prRoutes } from './routes/prs.js';
 import { configRoutes } from './routes/config.js';
-import { githubService } from './services/github.js';
+import { githubServiceManager } from './services/github-manager.js';
+import type { RepoIdentifier } from '@review-app/shared';
 
 // Load .env.local file
 config({ path: resolve(process.cwd(), '.env.local') });
@@ -75,14 +76,35 @@ async function buildServer() {
 async function start() {
   try {
     // Configure GitHub service from environment variables if available
-    const githubOwner = process.env.GITHUB_OWNER;
-    const githubRepo = process.env.GITHUB_REPO;
     const githubToken = process.env.GITHUB_TOKEN;
     const githubCurrentUser = process.env.GITHUB_CURRENT_USER;
+    const githubRepos = process.env.GITHUB_REPOS;
 
-    if (githubOwner && githubRepo) {
-      githubService.configure(githubOwner, githubRepo, githubToken, githubCurrentUser);
-      console.log(`✓ GitHub configured: ${githubOwner}/${githubRepo}${githubCurrentUser ? ` (user: ${githubCurrentUser})` : ''}`);
+    // Parse multi-repo format (GITHUB_REPOS=owner1/repo1,owner2/repo2)
+    if (githubRepos) {
+      const repos: RepoIdentifier[] = githubRepos
+        .split(',')
+        .map((r) => r.trim())
+        .filter((r) => r.includes('/'))
+        .map((r) => {
+          const [owner, repo] = r.split('/');
+          return { owner: owner.trim(), repo: repo.trim() };
+        });
+
+      if (repos.length > 0) {
+        githubServiceManager.configure(repos, githubToken, githubCurrentUser);
+        console.log(`✓ GitHub configured with ${repos.length} repo(s):`);
+        repos.forEach(({ owner, repo }) => {
+          console.log(`  - ${owner}/${repo}`);
+        });
+        if (githubCurrentUser) {
+          console.log(`  User: ${githubCurrentUser}`);
+        }
+      } else {
+        console.warn('⚠ GITHUB_REPOS environment variable is set but no valid repos found');
+      }
+    } else {
+      console.warn('⚠ GITHUB_REPOS environment variable not set. Please configure repositories.');
     }
 
     const server = await buildServer();

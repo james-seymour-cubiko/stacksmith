@@ -12,9 +12,10 @@ export function StacksListPage() {
   const [reviewPage, setReviewPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('all');
+  const [selectedRepo, setSelectedRepo] = useState<string>('all');
   const itemsPerPage = 10;
 
-  const { data: stacks, isLoading, error } = useStacks();
+  const { data: stacks, isLoading, error } = useStacks(selectedRepo !== 'all' ? selectedRepo : undefined);
   const { data: config } = useQuery({
     queryKey: ['config', 'github'],
     queryFn: () => configAPI.getGithub(),
@@ -26,10 +27,16 @@ export function StacksListPage() {
     if (!stacks) return [];
     const uniqueAuthors = new Set<string>();
     stacks.forEach(stack => {
-      stack.prs.forEach(pr => uniqueAuthors.add(pr.user.login));
+      stack.prs.forEach((pr: { user: { login: string } }) => uniqueAuthors.add(pr.user.login));
     });
     return Array.from(uniqueAuthors).sort();
   }, [stacks]);
+
+  // Get available repos from config
+  const availableRepos = useMemo(() => {
+    if (!config?.repos) return [];
+    return config.repos.map((r: { owner: string; repo: string }) => `${r.owner}/${r.repo}`);
+  }, [config?.repos]);
 
   // Fuzzy search and filter logic - must be called before any returns
   const filteredStacks = useMemo(() => {
@@ -192,10 +199,12 @@ export function StacksListPage() {
                 ? 'Closed'
                 : 'Open';
 
+              const stackUrl = `/stacks/${stack.repoOwner}/${stack.repoName}/${stack.id}`;
+
               return (
                 <tr key={stack.id} className={`${theme.cardHover} transition-colors`}>
                   <td className="py-2 pl-4 pr-2">
-                    <Link to={`/stacks/${stack.id}`} className="flex items-center gap-1.5">
+                    <Link to={stackUrl} className="flex items-center gap-1.5">
                       {hasMultiplePRs && (
                         <span className="px-1 py-0.5 rounded text-xs font-medium bg-everforest-purple/20 text-everforest-purple flex-shrink-0" title="Stacked PRs">
                           ⚡
@@ -205,6 +214,9 @@ export function StacksListPage() {
                         {stack.name}
                       </span>
                     </Link>
+                    <div className={`text-xs ${theme.textMuted} mt-0.5`}>
+                      {stack.repoOwner}/{stack.repoName}
+                    </div>
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-1.5">
@@ -235,7 +247,7 @@ export function StacksListPage() {
                   </td>
                   <td className="py-2 pl-2 pr-4 text-right">
                     <Link
-                      to={`/stacks/${stack.id}`}
+                      to={stackUrl}
                       className={`text-xs font-medium ${theme.textLink}`}
                     >
                       View
@@ -463,6 +475,27 @@ export function StacksListPage() {
           </div>
         </div>
 
+        {/* Repo Filter (only show if multiple repos configured) */}
+        {availableRepos.length > 1 && (
+          <div className="sm:w-64">
+            <select
+              value={selectedRepo}
+              onChange={(e) => {
+                setSelectedRepo(e.target.value);
+                setPage(1); // Reset to first page on filter change
+              }}
+              className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+            >
+              <option value="all">All Repositories</option>
+              {availableRepos.map(repo => (
+                <option key={repo} value={repo}>
+                  {repo}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Author Filter */}
         <div className="sm:w-64">
           <select
@@ -483,11 +516,12 @@ export function StacksListPage() {
         </div>
 
         {/* Clear Filters Button */}
-        {(searchQuery || selectedAuthor !== 'all') && (
+        {(searchQuery || selectedAuthor !== 'all' || selectedRepo !== 'all') && (
           <button
             onClick={() => {
               setSearchQuery('');
               setSelectedAuthor('all');
+              setSelectedRepo('all');
               setPage(1);
             }}
             className={`px-4 py-2 text-sm font-medium rounded-md ${theme.buttonSecondary} ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
@@ -498,7 +532,7 @@ export function StacksListPage() {
       </div>
 
       {/* No Results Message */}
-      {filteredStacks.length === 0 && (searchQuery || selectedAuthor !== 'all') && (
+      {filteredStacks.length === 0 && (searchQuery || selectedAuthor !== 'all' || selectedRepo !== 'all') && (
         <div className="text-center py-12">
           <svg
             className={`mx-auto h-12 w-12 ${theme.textMuted}`}

@@ -58,11 +58,25 @@ export function SettingsPage() {
           </p>
         </div>
 
-        {config && (
+        {config && config.repos && config.repos.length > 0 && (
           <div className={`px-6 py-4 ${theme.successBox} border-b border`}>
-            <p className={`text-sm ${theme.textSuccess}`}>
-              Currently configured: <strong>{config.owner}/{config.repo}</strong>
-              {config.currentUser && <span> • User: <strong>{config.currentUser}</strong></span>}
+            <p className={`text-sm ${theme.textSuccess} mb-2`}>
+              <strong>Currently configured repositories:</strong>
+            </p>
+            <ul className={`text-sm ${theme.textSuccess} list-disc list-inside space-y-1`}>
+              {config.repos.map((repo, index) => (
+                <li key={index}>
+                  <strong>{repo.owner}/{repo.repo}</strong>
+                </li>
+              ))}
+            </ul>
+            {config.currentUser && (
+              <p className={`text-sm ${theme.textSuccess} mt-2`}>
+                User: <strong>{config.currentUser}</strong>
+              </p>
+            )}
+            <p className={`text-sm ${theme.textSecondary} mt-3`}>
+              To configure multiple repositories, update the <code className="px-1 py-0.5 bg-everforest-bg2 rounded">GITHUB_REPOS</code> environment variable in your <code className="px-1 py-0.5 bg-everforest-bg2 rounded">.env.local</code> file.
             </p>
           </div>
         )}

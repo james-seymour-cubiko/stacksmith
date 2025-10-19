@@ -31,8 +31,10 @@ interface FileTreeNodeInternal {
 
 
 export function StackDetailPage() {
-  const { stackId, prNumber } = useParams<{ stackId: string; prNumber?: string }>();
-  const { data: stack, isLoading, error } = useStack(stackId);
+  const { owner, repo, stackId, prNumber } = useParams<{ owner: string; repo: string; stackId: string; prNumber?: string }>();
+
+  const { data: stack, isLoading, error } = useStack(owner, repo, stackId);
+
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -53,13 +55,13 @@ export function StackDetailPage() {
 
   // Update URL when selected PR changes
   useEffect(() => {
-    if (selectedPRNumber && stackId) {
-      const newPath = `/stacks/${stackId}/pr/${selectedPRNumber}`;
+    if (selectedPRNumber && stackId && owner && repo) {
+      const newPath = `/stacks/${owner}/${repo}/${stackId}/pr/${selectedPRNumber}`;
       if (window.location.pathname !== newPath) {
         navigate(newPath, { replace: true });
       }
     }
-  }, [selectedPRNumber, stackId, navigate]);
+  }, [selectedPRNumber, stackId, owner, repo, navigate]);
 
   // Track selected file for highlighting
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -116,39 +118,39 @@ export function StackDetailPage() {
   const currentPRNumber = selectedPRNumber ?? sortedPRs[0]?.number;
 
   // Fetch full PR details for stats (commits, additions, deletions, etc.)
-  const { data: currentPRDetails } = usePR(currentPRNumber);
+  const { data: currentPRDetails } = usePR(owner, repo, currentPRNumber);
 
   // Fetch diff for selected PR
-  const { data: diff, isLoading: diffLoading } = usePRDiff(currentPRNumber);
+  const { data: diff, isLoading: diffLoading } = usePRDiff(owner, repo, currentPRNumber);
 
   // Fetch commits for selected PR (to get commit SHA)
-  const { data: commits } = usePRCommits(currentPRNumber);
+  const { data: commits } = usePRCommits(owner, repo, currentPRNumber);
 
   // Fetch comments and reviews for selected PR
-  const { data: comments } = usePRComments(currentPRNumber);
-  const { data: reviews } = usePRReviews(currentPRNumber);
-  const { data: issueComments } = usePRIssueComments(currentPRNumber);
+  const { data: comments } = usePRComments(owner, repo, currentPRNumber);
+  const { data: reviews } = usePRReviews(owner, repo, currentPRNumber);
+  const { data: issueComments } = usePRIssueComments(owner, repo, currentPRNumber);
 
   // Fetch check runs for selected PR
-  const { data: checkRuns, isLoading: checkRunsLoading } = usePRCheckRuns(currentPRNumber);
+  const { data: checkRuns, isLoading: checkRunsLoading } = usePRCheckRuns(owner, repo, currentPRNumber);
 
   // Create comment mutations
-  const createComment = useCreatePRComment(currentPRNumber || 0);
-  const createIssueComment = useCreatePRIssueComment(currentPRNumber || 0);
+  const createComment = useCreatePRComment(owner || '', repo || '', currentPRNumber || 0);
+  const createIssueComment = useCreatePRIssueComment(owner || '', repo || '', currentPRNumber || 0);
 
   // Delete and reply comment mutations
-  const deleteComment = useDeleteComment(currentPRNumber || 0);
-  const deleteIssueComment = useDeleteIssueComment(currentPRNumber || 0);
-  const replyToComment = useReplyToComment(currentPRNumber || 0);
+  const deleteComment = useDeleteComment(owner || '', repo || '', currentPRNumber || 0);
+  const deleteIssueComment = useDeleteIssueComment(owner || '', repo || '', currentPRNumber || 0);
+  const replyToComment = useReplyToComment(owner || '', repo || '', currentPRNumber || 0);
 
   // Merge PR mutation
   const mergePR = useMergePR();
 
   // CI check rerun mutation
-  const rerunAllChecks = useRerunAllChecks(currentPRNumber || 0);
+  const rerunAllChecks = useRerunAllChecks(owner || '', repo || '', currentPRNumber || 0);
 
   // Approve PR mutation
-  const approvePR = useApprovePR(currentPRNumber || 0);
+  const approvePR = useApprovePR(owner || '', repo || '', currentPRNumber || 0);
 
   // Fetch GitHub config to get current user
   const { data: config } = useQuery({
@@ -412,7 +414,7 @@ export function StackDetailPage() {
         const pr = prsToMerge[i];
         console.log(`Merging PR #${pr.number} (${i + 1}/${prsToMerge.length})...`);
 
-        const result = await mergePR.mutateAsync({ prNumber: pr.number });
+        const result = await mergePR.mutateAsync({ owner: owner!, repo: repo!, prNumber: pr.number });
 
         if (!result.merged) {
           alert(`Failed to merge PR #${pr.number}: ${result.message}\n\nStopped at ${i + 1}/${prsToMerge.length} branches.`);
@@ -455,7 +457,7 @@ export function StackDetailPage() {
 
     // Determine CI emoji based on check runs from cache
     const getCIEmoji = (prNumber: number) => {
-      const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', prNumber, 'checks']);
+      const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']);
 
       if (!checkRuns) {
         return '❓'; // Not loaded

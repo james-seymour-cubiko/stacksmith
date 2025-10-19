@@ -1,101 +1,99 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { prsAPI } from '../lib/api';
 
-export function usePRs(state: 'open' | 'closed' | 'all' = 'open') {
+export function usePRs(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
   return useQuery({
-    queryKey: ['prs', 'list', state],
-    queryFn: () => prsAPI.list(state),
+    queryKey: ['prs', owner, repo, 'list', state],
+    queryFn: () => prsAPI.list(owner, repo, state),
   });
 }
 
-export function usePR(prNumber: number | undefined) {
+export function usePR(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber],
-    queryFn: () => prsAPI.get(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber],
+    queryFn: () => prsAPI.get(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRDiff(prNumber: number | undefined) {
+export function usePRDiff(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'diff'],
-    queryFn: () => prsAPI.getDiff(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'diff'],
+    queryFn: () => prsAPI.getDiff(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRReviews(prNumber: number | undefined) {
+export function usePRReviews(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'reviews'],
-    queryFn: () => prsAPI.getReviews(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'reviews'],
+    queryFn: () => prsAPI.getReviews(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRComments(prNumber: number | undefined) {
+export function usePRComments(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'comments'],
-    queryFn: () => prsAPI.getComments(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'comments'],
+    queryFn: () => prsAPI.getComments(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRIssueComments(prNumber: number | undefined) {
+export function usePRIssueComments(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'issue-comments'],
-    queryFn: () => prsAPI.getIssueComments(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'issue-comments'],
+    queryFn: () => prsAPI.getIssueComments(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRCommits(prNumber: number | undefined) {
+export function usePRCommits(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'commits'],
-    queryFn: () => prsAPI.getCommits(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'commits'],
+    queryFn: () => prsAPI.getCommits(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
   });
 }
 
-export function usePRCheckRuns(prNumber: number | undefined, options?: { refetchInterval?: number | false }) {
+export function usePRCheckRuns(owner: string | undefined, repo: string | undefined, prNumber: number | undefined, options?: { refetchInterval?: number | false }) {
   return useQuery({
-    queryKey: ['prs', prNumber, 'checks'],
-    queryFn: () => prsAPI.getCheckRuns(prNumber!),
-    enabled: !!prNumber,
+    queryKey: ['prs', owner, repo, prNumber, 'checks'],
+    queryFn: () => prsAPI.getCheckRuns(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
     refetchInterval: options?.refetchInterval,
   });
 }
 
-export function useRerunCheckRun(prNumber: number) {
+export function useRerunCheckRun(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (checkRunId: number) => prsAPI.rerunCheckRun(prNumber, checkRunId),
+    mutationFn: (checkRunId: number) => prsAPI.rerunCheckRun(owner, repo, prNumber, checkRunId),
     onSuccess: () => {
       // Delay invalidation to give GitHub time to create new check runs
-      // GitHub takes a moment to start the new workflow and create check runs
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'checks'] });
-      }, 3000); // 3 second delay
+        queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'checks'] });
+      }, 3000);
     },
   });
 }
 
-export function useRerunAllChecks(prNumber: number) {
+export function useRerunAllChecks(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => prsAPI.rerunAllChecks(prNumber),
+    mutationFn: () => prsAPI.rerunAllChecks(owner, repo, prNumber),
     onSuccess: () => {
       // Delay invalidation to give GitHub time to create new check runs
-      // GitHub takes a moment to start the new workflows and create check runs
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'checks'] });
-      }, 3000); // 3 second delay
+        queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'checks'] });
+      }, 3000);
     },
   });
 }
 
-export function useCreatePRComment(prNumber: number) {
+export function useCreatePRComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -104,22 +102,20 @@ export function useCreatePRComment(prNumber: number) {
       commit_id: string;
       path: string;
       line: number;
-    }) => prsAPI.createComment(prNumber, data),
+    }) => prsAPI.createComment(owner, repo, prNumber, data),
     onSuccess: () => {
-      // Invalidate comments query to refetch
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
     },
   });
 }
 
-export function useCreatePRIssueComment(prNumber: number) {
+export function useCreatePRIssueComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: string) => prsAPI.createIssueComment(prNumber, body),
+    mutationFn: (body: string) => prsAPI.createIssueComment(owner, repo, prNumber, body),
     onSuccess: () => {
-      // Invalidate issue comments query to refetch
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'issue-comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'issue-comments'] });
     },
   });
 }
@@ -128,61 +124,56 @@ export function useMergePR() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ prNumber, mergeMethod }: { prNumber: number; mergeMethod?: 'merge' | 'squash' | 'rebase' }) =>
-      prsAPI.mergePR(prNumber, mergeMethod),
+    mutationFn: ({ owner, repo, prNumber, mergeMethod }: { owner: string; repo: string; prNumber: number; mergeMethod?: 'merge' | 'squash' | 'rebase' }) =>
+      prsAPI.mergePR(owner, repo, prNumber, mergeMethod),
     onSuccess: () => {
-      // Invalidate all PR-related queries to refetch
       queryClient.invalidateQueries({ queryKey: ['prs'] });
       queryClient.invalidateQueries({ queryKey: ['stacks'] });
     },
   });
 }
 
-export function useApprovePR(prNumber: number) {
+export function useApprovePR(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => prsAPI.approvePR(prNumber),
+    mutationFn: () => prsAPI.approvePR(owner, repo, prNumber),
     onSuccess: () => {
-      // Invalidate reviews to show the new approval
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'reviews'] });
     },
   });
 }
 
-export function useDeleteComment(prNumber: number) {
+export function useDeleteComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (commentId: number) => prsAPI.deleteComment(prNumber, commentId),
+    mutationFn: (commentId: number) => prsAPI.deleteComment(owner, repo, prNumber, commentId),
     onSuccess: () => {
-      // Invalidate comments query to refetch
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
     },
   });
 }
 
-export function useDeleteIssueComment(prNumber: number) {
+export function useDeleteIssueComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (commentId: number) => prsAPI.deleteIssueComment(prNumber, commentId),
+    mutationFn: (commentId: number) => prsAPI.deleteIssueComment(owner, repo, prNumber, commentId),
     onSuccess: () => {
-      // Invalidate issue comments query to refetch
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'issue-comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'issue-comments'] });
     },
   });
 }
 
-export function useReplyToComment(prNumber: number) {
+export function useReplyToComment(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ commentId, body }: { commentId: number; body: string }) =>
-      prsAPI.replyToComment(prNumber, commentId, body),
+      prsAPI.replyToComment(owner, repo, prNumber, commentId, body),
     onSuccess: () => {
-      // Invalidate comments query to refetch
-      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
     },
   });
 }

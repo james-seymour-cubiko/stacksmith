@@ -1,10 +1,23 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { githubService } from '../services/github.js';
+import { githubServiceManager } from '../services/github-manager.js';
 
 export const prRoutes: FastifyPluginAsync = async (server) => {
   const typedServer = server.withTypeProvider<ZodTypeProvider>();
+
+  // Helper to get the GitHub service for a specific repo
+  const getServiceFromQuery = (owner?: string, repo?: string) => {
+    if (!owner || !repo) {
+      throw new Error('Repository owner and name are required. Please provide owner and repo query parameters.');
+    }
+
+    if (!githubServiceManager.isConfigured()) {
+      throw new Error('GitHub service not configured');
+    }
+
+    return githubServiceManager.getService(owner, repo);
+  };
 
   // List all PRs
   typedServer.get(
@@ -14,6 +27,8 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         description: 'List all pull requests from GitHub',
         tags: ['prs'],
         querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
           state: z.enum(['open', 'closed', 'all']).optional().default('open'),
           per_page: z.coerce.number().int().min(1).max(100).optional().default(50),
           page: z.coerce.number().int().min(1).optional().default(1),
@@ -23,17 +38,18 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { owner, repo, state, per_page, page, sort, direction } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const prs = await service.listPRs(state, { per_page, page, sort, direction });
+        return prs;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { state, per_page, page, sort, direction } = request.query;
-      const prs = await githubService.listPRs(state, { per_page, page, sort, direction });
-      return prs;
     }
   );
 
@@ -47,20 +63,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const pr = await service.getPR(prNumber);
+        return pr;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const pr = await githubService.getPR(prNumber);
-      return pr;
     }
   );
 
@@ -74,20 +96,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const files = await service.getPRFiles(prNumber);
+        return files;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const files = await githubService.getPRFiles(prNumber);
-      return files;
     }
   );
 
@@ -101,20 +129,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const reviews = await service.getPRReviews(prNumber);
+        return reviews;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const reviews = await githubService.getPRReviews(prNumber);
-      return reviews;
     }
   );
 
@@ -128,20 +162,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const comments = await service.getPRComments(prNumber);
+        return comments;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const comments = await githubService.getPRComments(prNumber);
-      return comments;
     }
   );
 
@@ -155,20 +195,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const comments = await service.getPRIssueComments(prNumber);
+        return comments;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const comments = await githubService.getPRIssueComments(prNumber);
-      return comments;
     }
   );
 
@@ -182,20 +228,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const commits = await service.getPRCommits(prNumber);
+        return commits;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const commits = await githubService.getPRCommits(prNumber);
-      return commits;
     }
   );
 
@@ -209,6 +261,10 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
         body: z.object({
           body: z.string().min(1),
           commit_id: z.string(),
@@ -221,19 +277,13 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber } = request.params;
-      const { body, commit_id, path, line, start_line, side, start_side } = request.body;
-
       try {
-        const comment = await githubService.createPRReviewComment(
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const { body, commit_id, path, line, start_line, side, start_side } = request.body;
+
+        const comment = await service.createPRReviewComment(
           prNumber,
           body,
           commit_id,
@@ -264,25 +314,23 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
         body: z.object({
           body: z.string().min(1),
         }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber } = request.params;
-      const { body } = request.body;
-
       try {
-        const comment = await githubService.createPRIssueComment(prNumber, body);
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const { body } = request.body;
+
+        const comment = await service.createPRIssueComment(prNumber, body);
         return reply.code(201).send(comment);
       } catch (error) {
         return reply.code(400).send({
@@ -304,20 +352,26 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const checks = await service.getPRCheckRuns(prNumber);
+        return checks;
+      } catch (error: any) {
         return reply.code(503).send({
           error: 'Service Unavailable',
-          message: 'GitHub service not configured',
+          message: error.message,
           statusCode: 503,
         });
       }
-
-      const { prNumber } = request.params;
-      const checks = await githubService.getPRCheckRuns(prNumber);
-      return checks;
     }
   );
 
@@ -332,21 +386,19 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
           prNumber: z.coerce.number().int().positive(),
           checkRunId: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { checkRunId } = request.params;
-
       try {
-        await githubService.rerunCheckRun(checkRunId);
+        const { checkRunId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.rerunCheckRun(checkRunId);
         return reply.code(200).send({ success: true });
       } catch (error) {
         return reply.code(400).send({
@@ -368,21 +420,19 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber } = request.params;
-
       try {
-        await githubService.rerunAllChecksForPR(prNumber);
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.rerunAllChecksForPR(prNumber);
         return reply.code(200).send({ success: true });
       } catch (error) {
         return reply.code(400).send({
@@ -404,25 +454,23 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
         body: z.object({
           merge_method: z.enum(['merge', 'squash', 'rebase']).optional(),
         }).optional(),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber } = request.params;
-      const mergeMethod = request.body?.merge_method || 'merge';
-
       try {
-        const result = await githubService.mergePR(prNumber, mergeMethod);
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const mergeMethod = request.body?.merge_method || 'merge';
+
+        const result = await service.mergePR(prNumber, mergeMethod);
         return reply.code(200).send(result);
       } catch (error) {
         return reply.code(400).send({
@@ -445,21 +493,19 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
           prNumber: z.coerce.number().int().positive(),
           commentId: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { commentId } = request.params;
-
       try {
-        await githubService.deleteReviewComment(commentId);
+        const { commentId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.deleteReviewComment(commentId);
         return reply.code(204).send();
       } catch (error) {
         return reply.code(400).send({
@@ -482,21 +528,19 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
           prNumber: z.coerce.number().int().positive(),
           commentId: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { commentId } = request.params;
-
       try {
-        await githubService.deleteIssueComment(commentId);
+        const { commentId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.deleteIssueComment(commentId);
         return reply.code(204).send();
       } catch (error) {
         return reply.code(400).send({
@@ -519,25 +563,23 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
           prNumber: z.coerce.number().int().positive(),
           commentId: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
         body: z.object({
           body: z.string().min(1),
         }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber, commentId } = request.params;
-      const { body } = request.body;
-
       try {
-        const comment = await githubService.replyToReviewComment(prNumber, body, commentId);
+        const { prNumber, commentId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const { body } = request.body;
+
+        const comment = await service.replyToReviewComment(prNumber, body, commentId);
         return reply.code(201).send(comment);
       } catch (error) {
         return reply.code(400).send({
@@ -559,21 +601,19 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
         params: z.object({
           prNumber: z.coerce.number().int().positive(),
         }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
       },
     },
     async (request, reply) => {
-      if (!githubService.isConfigured()) {
-        return reply.code(503).send({
-          error: 'Service Unavailable',
-          message: 'GitHub service not configured',
-          statusCode: 503,
-        });
-      }
-
-      const { prNumber } = request.params;
-
       try {
-        const review = await githubService.approvePR(prNumber);
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        const review = await service.approvePR(prNumber);
         return reply.code(201).send(review);
       } catch (error) {
         return reply.code(400).send({

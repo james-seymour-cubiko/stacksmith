@@ -8,6 +8,7 @@ import type {
   GithubCheckRun,
   ConfigureGithubRequest,
   GithubConfig,
+  MultiRepoConfig,
 } from '@review-app/shared';
 
 const API_BASE = '/api';
@@ -37,13 +38,19 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Stack API
 export const stacksAPI = {
-  list: () => fetchAPI<StackWithPRs[]>('/stacks'),
-  get: (stackId: string) => fetchAPI<StackWithPRs>(`/stacks/${stackId}`),
+  list: (repo?: string) => {
+    const params = repo ? `?repo=${encodeURIComponent(repo)}` : '';
+    return fetchAPI<StackWithPRs[]>(`/stacks${params}`);
+  },
+  get: (owner: string, repo: string, stackId: string) =>
+    fetchAPI<StackWithPRs>(`/stacks/${owner}/${repo}/${stackId}`),
 };
 
 // PR API
 export const prsAPI = {
   list: (
+    owner: string,
+    repo: string,
     state: 'open' | 'closed' | 'all' = 'open',
     options?: {
       per_page?: number;
@@ -52,7 +59,7 @@ export const prsAPI = {
       direction?: 'asc' | 'desc';
     }
   ) => {
-    const params = new URLSearchParams({ state });
+    const params = new URLSearchParams({ owner, repo, state });
     if (options?.per_page) params.append('per_page', options.per_page.toString());
     if (options?.page) params.append('page', options.page.toString());
     if (options?.sort) params.append('sort', options.sort);
@@ -60,31 +67,38 @@ export const prsAPI = {
     return fetchAPI<GithubPR[]>(`/prs?${params.toString()}`);
   },
 
-  get: (prNumber: number) => fetchAPI<GithubPR>(`/prs/${prNumber}`),
+  get: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubPR>(`/prs/${prNumber}?owner=${owner}&repo=${repo}`),
 
-  getDiff: (prNumber: number) => fetchAPI<GithubDiff[]>(`/prs/${prNumber}/diff`),
+  getDiff: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubDiff[]>(`/prs/${prNumber}/diff?owner=${owner}&repo=${repo}`),
 
-  getReviews: (prNumber: number) => fetchAPI<GithubReview[]>(`/prs/${prNumber}/reviews`),
+  getReviews: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubReview[]>(`/prs/${prNumber}/reviews?owner=${owner}&repo=${repo}`),
 
-  getComments: (prNumber: number) => fetchAPI<GithubComment[]>(`/prs/${prNumber}/comments`),
+  getComments: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubComment[]>(`/prs/${prNumber}/comments?owner=${owner}&repo=${repo}`),
 
-  getIssueComments: (prNumber: number) => fetchAPI<GithubComment[]>(`/prs/${prNumber}/issue-comments`),
+  getIssueComments: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubComment[]>(`/prs/${prNumber}/issue-comments?owner=${owner}&repo=${repo}`),
 
-  getCommits: (prNumber: number) => fetchAPI<GithubCommit[]>(`/prs/${prNumber}/commits`),
+  getCommits: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubCommit[]>(`/prs/${prNumber}/commits?owner=${owner}&repo=${repo}`),
 
-  getCheckRuns: (prNumber: number) => fetchAPI<GithubCheckRun[]>(`/prs/${prNumber}/checks`),
+  getCheckRuns: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubCheckRun[]>(`/prs/${prNumber}/checks?owner=${owner}&repo=${repo}`),
 
-  rerunCheckRun: (prNumber: number, checkRunId: number) =>
-    fetchAPI<{ success: boolean }>(`/prs/${prNumber}/checks/${checkRunId}/rerun`, {
+  rerunCheckRun: (owner: string, repo: string, prNumber: number, checkRunId: number) =>
+    fetchAPI<{ success: boolean }>(`/prs/${prNumber}/checks/${checkRunId}/rerun?owner=${owner}&repo=${repo}`, {
       method: 'POST',
     }),
 
-  rerunAllChecks: (prNumber: number) =>
-    fetchAPI<{ success: boolean }>(`/prs/${prNumber}/checks/rerun`, {
+  rerunAllChecks: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<{ success: boolean }>(`/prs/${prNumber}/checks/rerun?owner=${owner}&repo=${repo}`, {
       method: 'POST',
     }),
 
-  createComment: (prNumber: number, data: {
+  createComment: (owner: string, repo: string, prNumber: number, data: {
     body: string;
     commit_id: string;
     path: string;
@@ -93,48 +107,48 @@ export const prsAPI = {
     side?: 'LEFT' | 'RIGHT';
     start_side?: 'LEFT' | 'RIGHT';
   }) =>
-    fetchAPI<GithubComment>(`/prs/${prNumber}/comments`, {
+    fetchAPI<GithubComment>(`/prs/${prNumber}/comments?owner=${owner}&repo=${repo}`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  createIssueComment: (prNumber: number, body: string) =>
-    fetchAPI<GithubComment>(`/prs/${prNumber}/issue-comments`, {
+  createIssueComment: (owner: string, repo: string, prNumber: number, body: string) =>
+    fetchAPI<GithubComment>(`/prs/${prNumber}/issue-comments?owner=${owner}&repo=${repo}`, {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
 
-  mergePR: (prNumber: number, mergeMethod?: 'merge' | 'squash' | 'rebase') =>
-    fetchAPI<{ merged: boolean; message: string; sha?: string }>(`/prs/${prNumber}/merge`, {
+  mergePR: (owner: string, repo: string, prNumber: number, mergeMethod?: 'merge' | 'squash' | 'rebase') =>
+    fetchAPI<{ merged: boolean; message: string; sha?: string }>(`/prs/${prNumber}/merge?owner=${owner}&repo=${repo}`, {
       method: 'POST',
       body: JSON.stringify({ merge_method: mergeMethod }),
     }),
 
-  deleteComment: (prNumber: number, commentId: number) =>
-    fetchAPI<void>(`/prs/${prNumber}/comments/${commentId}`, {
+  deleteComment: (owner: string, repo: string, prNumber: number, commentId: number) =>
+    fetchAPI<void>(`/prs/${prNumber}/comments/${commentId}?owner=${owner}&repo=${repo}`, {
       method: 'DELETE',
     }),
 
-  deleteIssueComment: (prNumber: number, commentId: number) =>
-    fetchAPI<void>(`/prs/${prNumber}/issue-comments/${commentId}`, {
+  deleteIssueComment: (owner: string, repo: string, prNumber: number, commentId: number) =>
+    fetchAPI<void>(`/prs/${prNumber}/issue-comments/${commentId}?owner=${owner}&repo=${repo}`, {
       method: 'DELETE',
     }),
 
-  replyToComment: (prNumber: number, commentId: number, body: string) =>
-    fetchAPI<GithubComment>(`/prs/${prNumber}/comments/${commentId}/replies`, {
+  replyToComment: (owner: string, repo: string, prNumber: number, commentId: number, body: string) =>
+    fetchAPI<GithubComment>(`/prs/${prNumber}/comments/${commentId}/replies?owner=${owner}&repo=${repo}`, {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
 
-  approvePR: (prNumber: number) =>
-    fetchAPI<GithubReview>(`/prs/${prNumber}/approve`, {
+  approvePR: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubReview>(`/prs/${prNumber}/approve?owner=${owner}&repo=${repo}`, {
       method: 'POST',
     }),
 };
 
 // Config API
 export const configAPI = {
-  getGithub: () => fetchAPI<GithubConfig>('/config/github'),
+  getGithub: () => fetchAPI<MultiRepoConfig>('/config/github'),
 
   configureGithub: (data: ConfigureGithubRequest) =>
     fetchAPI<{ success: boolean }>('/config/github', {

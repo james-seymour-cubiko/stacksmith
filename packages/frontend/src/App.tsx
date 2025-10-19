@@ -64,8 +64,8 @@ function MainContent() {
     <main className={`${isStackDetailPage ? 'max-w-[95%]' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
       <Routes>
         <Route path="/" element={<StacksListPage />} />
-        <Route path="/stacks/:stackId" element={<StackDetailPage />} />
-        <Route path="/stacks/:stackId/pr/:prNumber" element={<StackDetailPage />} />
+        <Route path="/stacks/:owner/:repo/:stackId" element={<StackDetailPage />} />
+        <Route path="/stacks/:owner/:repo/:stackId/pr/:prNumber" element={<StackDetailPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </main>
