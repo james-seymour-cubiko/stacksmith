@@ -1,5 +1,4 @@
 import type {
-  Stack,
   StackWithPRs,
   GithubPR,
   GithubDiff,
@@ -38,7 +37,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 // Stack API
 export const stacksAPI = {
-  list: () => fetchAPI<Stack[]>('/stacks'),
+  list: () => fetchAPI<StackWithPRs[]>('/stacks'),
   get: (stackId: string) => fetchAPI<StackWithPRs>(`/stacks/${stackId}`),
 };
 

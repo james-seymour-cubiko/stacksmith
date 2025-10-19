@@ -41,7 +41,7 @@ function Navigation() {
             </div>
             <div className="ml-6 flex space-x-8">
               <Link to="/" className={linkClass('/stacks')}>
-                Stacks
+                Pull Requests
               </Link>
               <Link to="/settings" className={linkClass('/settings')}>
                 Settings

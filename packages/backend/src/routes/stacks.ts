@@ -2,8 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { githubService } from '../services/github.js';
-import { inferStacksFromPRs, getStackById, stackWithPRsToStack } from '../services/stack-inference.js';
-import { StackSchema } from '../schemas/index.js';
+import { inferStacksFromPRs, getStackById } from '../services/stack-inference.js';
 
 export const stackRoutes: FastifyPluginAsync = async (server) => {
   const typedServer = server.withTypeProvider<ZodTypeProvider>();
@@ -15,9 +14,6 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
       schema: {
         description: 'List all stacks inferred from GitHub PR branch relationships',
         tags: ['stacks'],
-        response: {
-          200: z.array(StackSchema),
-        },
       },
     },
     async (_request, reply) => {
@@ -33,13 +29,10 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
       // Use a higher limit to ensure we capture all potential stacks
       const allPRs = await githubService.listPRs('open', { per_page: 100 });
 
-      // Infer stacks from PR relationships
+      // Infer stacks from PR relationships and return full data
       const stacksWithPRs = inferStacksFromPRs(allPRs);
 
-      // Convert to simple Stack format for list response
-      const stacks = stacksWithPRs.map(stackWithPRsToStack);
-
-      return stacks;
+      return stacksWithPRs;
     }
   );
 

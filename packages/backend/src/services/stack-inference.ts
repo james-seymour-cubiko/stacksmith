@@ -47,29 +47,29 @@ export function inferStacksFromPRs(allPRs: GithubPR[]): StackWithPRs[] {
       lastPR = child;
     }
 
-    // Only create a stack if there are multiple PRs in the chain
-    if (chain.length > 1) {
-      const stackId = generateStackId(chain);
-      const stackName = generateStackName(chain);
-      const now = new Date().toISOString();
+    // Create a stack for all PRs (including single PRs)
+    const stackId = generateStackId(chain);
+    const stackName = generateStackName(chain);
+    const now = new Date().toISOString();
 
-      // Convert to StackedPRs with order information
-      const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
-        ...pr,
-        stackOrder: index,
-        stackId,
-        stackName,
-      }));
+    // Convert to StackedPRs with order information
+    const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
+      ...pr,
+      stackOrder: index,
+      stackId,
+      stackName,
+    }));
 
-      stacks.push({
-        id: stackId,
-        name: stackName,
-        description: `Stack from ${chain[0].base.ref} with ${chain.length} PRs`,
-        created_at: now,
-        updated_at: now,
-        prs: stackedPRs,
-      });
-    }
+    stacks.push({
+      id: stackId,
+      name: stackName,
+      description: chain.length > 1
+        ? `Stack from ${chain[0].base.ref} with ${chain.length} PRs`
+        : `Single PR: ${chain[0].title}`,
+      created_at: now,
+      updated_at: now,
+      prs: stackedPRs,
+    });
   }
 
   return stacks;
