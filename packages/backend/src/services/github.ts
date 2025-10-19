@@ -600,6 +600,31 @@ export class GithubService {
       changed_files: data.changed_files,
     };
   }
+
+  async approvePR(prNumber: number): Promise<GithubReview> {
+    this.ensureConfigured();
+
+    const { data } = await this.octokit!.pulls.createReview({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+      event: 'APPROVE',
+    });
+
+    return {
+      id: data.id,
+      user: {
+        login: data.user?.login || '',
+        id: data.user?.id || 0,
+        avatar_url: data.user?.avatar_url || '',
+        html_url: data.user?.html_url || '',
+      },
+      body: data.body || '',
+      state: data.state as 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING',
+      html_url: data.html_url,
+      submitted_at: data.submitted_at || new Date().toISOString(),
+    };
+  }
 }
 
 // Singleton instance

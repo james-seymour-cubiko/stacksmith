@@ -548,4 +548,40 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       }
     }
   );
+
+  // Approve pull request
+  typedServer.post(
+    '/:prNumber/approve',
+    {
+      schema: {
+        description: 'Approve a pull request',
+        tags: ['prs'],
+        params: z.object({
+          prNumber: z.coerce.number().int().positive(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      if (!githubService.isConfigured()) {
+        return reply.code(503).send({
+          error: 'Service Unavailable',
+          message: 'GitHub service not configured',
+          statusCode: 503,
+        });
+      }
+
+      const { prNumber } = request.params;
+
+      try {
+        const review = await githubService.approvePR(prNumber);
+        return reply.code(201).send(review);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'Bad Request',
+          message: error instanceof Error ? error.message : 'Failed to approve PR',
+          statusCode: 400,
+        });
+      }
+    }
+  );
 };

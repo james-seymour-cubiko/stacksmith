@@ -125,6 +125,11 @@ export const prsAPI = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
+
+  approvePR: (prNumber: number) =>
+    fetchAPI<GithubReview>(`/prs/${prNumber}/approve`, {
+      method: 'POST',
+    }),
 };
 
 // Config API

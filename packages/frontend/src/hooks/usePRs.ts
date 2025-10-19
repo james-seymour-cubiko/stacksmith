@@ -138,6 +138,18 @@ export function useMergePR() {
   });
 }
 
+export function useApprovePR(prNumber: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => prsAPI.approvePR(prNumber),
+    onSuccess: () => {
+      // Invalidate reviews to show the new approval
+      queryClient.invalidateQueries({ queryKey: ['prs', prNumber, 'reviews'] });
+    },
+  });
+}
+
 export function useDeleteComment(prNumber: number) {
   const queryClient = useQueryClient();
 

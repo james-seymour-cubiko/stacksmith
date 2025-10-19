@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
 import { SyntaxHighlightedLine } from '../components/SyntaxHighlightedLine';
 import { InlineDiffLine } from '../components/InlineDiffLine';
 import { getLanguageFromFilename } from '../lib/languageMapper';
+import { configAPI } from '../lib/api';
 import DiffMatchPatch from 'diff-match-patch';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
@@ -145,6 +146,15 @@ export function StackDetailPage() {
 
   // CI check rerun mutation
   const rerunAllChecks = useRerunAllChecks(currentPRNumber || 0);
+
+  // Approve PR mutation
+  const approvePR = useApprovePR(currentPRNumber || 0);
+
+  // Fetch GitHub config to get current user
+  const { data: config } = useQuery({
+    queryKey: ['config', 'github'],
+    queryFn: () => configAPI.getGithub(),
+  });
 
   // Track PR-level comment form state
   const [isAddingPRComment, setIsAddingPRComment] = useState(false);
@@ -1592,6 +1602,23 @@ export function StackDetailPage() {
 
       {/* Extra scrolling space */}
       <div className="h-[50vh]"></div>
+
+      {/* Sticky Approve Button - only show if current user is not the PR author */}
+      {selectedPR && config?.currentUser && selectedPR.user.login !== config.currentUser && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+          <button
+            onClick={() => approvePR.mutate()}
+            disabled={approvePR.isPending}
+            className={`px-6 py-3 rounded-lg font-medium shadow-lg transition-colors ${
+              approvePR.isPending
+                ? 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
+                : 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
+            }`}
+          >
+            {approvePR.isPending ? 'Approving...' : '✓ Approve PR'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
