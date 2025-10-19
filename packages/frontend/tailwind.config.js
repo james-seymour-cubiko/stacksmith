@@ -9,7 +9,7 @@ export default {
       colors: {
         // Everforest Dark color palette
         'everforest': {
-          bg0: '#2b3339',
+          bg0: '#323d43',
           bg1: '#323c41',
           bg2: '#3a454a',
           bg3: '#445055',
@@ -21,9 +21,9 @@ export default {
           'bg-green': 'rgba(167, 192, 128, 0.10)',
           'bg-blue': '#3a515d',
           fg: '#d3c6aa',
-          red: '#e67e80',
+          red: '#e68183',
           orange: '#e69875',
-          yellow: '#dbbc7f',
+          yellow: '#d9bb80',
           green: '#a7c080',
           aqua: '#83c092',
           blue: '#7fbbb3',
