@@ -2,8 +2,6 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StacksListPage } from './pages/StacksListPage';
 import { StackDetailPage } from './pages/StackDetailPage';
-import { PRsListPage } from './pages/PRsListPage';
-import { PRDetailPage } from './pages/PRDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const queryClient = new QueryClient({
@@ -45,9 +43,6 @@ function Navigation() {
               <Link to="/" className={linkClass('/stacks')}>
                 Stacks
               </Link>
-              <Link to="/prs" className={linkClass('/prs')}>
-                Pull Requests
-              </Link>
               <Link to="/settings" className={linkClass('/settings')}>
                 Settings
               </Link>
@@ -70,8 +65,6 @@ function App() {
             <Routes>
               <Route path="/" element={<StacksListPage />} />
               <Route path="/stacks/:stackId" element={<StackDetailPage />} />
-              <Route path="/prs" element={<PRsListPage />} />
-              <Route path="/prs/:prNumber" element={<PRDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </main>
