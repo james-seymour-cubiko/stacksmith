@@ -88,18 +88,8 @@ function generateStackId(prs: GithubPR[]): string {
  * Generate a human-readable stack name
  */
 function generateStackName(prs: GithubPR[]): string {
-  // Try to extract a meaningful name from the branch names
-  const rootBranch = prs[0].head.ref;
-
-  // Remove common prefixes like feature/, fix/, etc.
-  const cleanName = rootBranch
-    .replace(/^(feature|feat|fix|bugfix|hotfix|chore|refactor|docs|test|wip)\//i, '')
-    .replace(/[-_]/g, ' ')
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-  return cleanName || rootBranch;
+  // Use the root PR's title as the stack name
+  return prs[0].title;
 }
 
 /**

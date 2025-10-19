@@ -1,9 +1,55 @@
 import { useStacks } from '../hooks/useStacks';
 import { Link } from 'react-router-dom';
 import { theme } from '../lib/theme';
+import { useState, useMemo } from 'react';
 
 export function StacksListPage() {
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAuthor, setSelectedAuthor] = useState<string>('all');
+  const itemsPerPage = 10;
+
   const { data: stacks, isLoading, error } = useStacks();
+
+  // Get unique authors for filter - must be called before any returns
+  const authors = useMemo(() => {
+    if (!stacks) return [];
+    const uniqueAuthors = new Set<string>();
+    stacks.forEach(stack => {
+      stack.prs.forEach(pr => uniqueAuthors.add(pr.user.login));
+    });
+    return Array.from(uniqueAuthors).sort();
+  }, [stacks]);
+
+  // Fuzzy search and filter logic - must be called before any returns
+  const filteredStacks = useMemo(() => {
+    if (!stacks) return [];
+
+    let filtered = stacks;
+
+    // Filter by author
+    if (selectedAuthor !== 'all') {
+      filtered = filtered.filter(stack =>
+        stack.prs.some(pr => pr.user.login === selectedAuthor)
+      );
+    }
+
+    // Fuzzy search by stack name or PR titles
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(stack => {
+        // Search in stack name
+        if (stack.name.toLowerCase().includes(query)) return true;
+
+        // Search in any PR title
+        return stack.prs.some(pr =>
+          pr.title.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    return filtered;
+  }, [stacks, selectedAuthor, searchQuery]);
 
   if (isLoading) {
     return (
@@ -45,6 +91,13 @@ export function StacksListPage() {
     );
   }
 
+  // Calculate pagination
+  const totalStacks = filteredStacks.length;
+  const totalPages = Math.ceil(totalStacks / itemsPerPage);
+  const startIndex = (page - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedStacks = filteredStacks.slice(startIndex, endIndex);
+
   return (
     <div>
       <div className="sm:flex sm:items-center mb-6">
@@ -56,6 +109,98 @@ export function StacksListPage() {
         </div>
       </div>
 
+      {/* Search and Filter Controls */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-4">
+        {/* Search Input */}
+        <div className="flex-1">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg
+                className={`h-5 w-5 ${theme.textMuted}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search by stack or PR title..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1); // Reset to first page on search
+              }}
+              className={`block w-full pl-10 pr-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+            />
+          </div>
+        </div>
+
+        {/* Author Filter */}
+        <div className="sm:w-64">
+          <select
+            value={selectedAuthor}
+            onChange={(e) => {
+              setSelectedAuthor(e.target.value);
+              setPage(1); // Reset to first page on filter change
+            }}
+            className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent`}
+          >
+            <option value="all">All Authors</option>
+            {authors.map(author => (
+              <option key={author} value={author}>
+                {author}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Clear Filters Button */}
+        {(searchQuery || selectedAuthor !== 'all') && (
+          <button
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedAuthor('all');
+              setPage(1);
+            }}
+            className={`px-4 py-2 text-sm font-medium rounded-md ${theme.buttonSecondary} ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* No Results Message */}
+      {filteredStacks.length === 0 && (searchQuery || selectedAuthor !== 'all') && (
+        <div className="text-center py-12">
+          <svg
+            className={`mx-auto h-12 w-12 ${theme.textMuted}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <h3 className={`mt-2 text-sm font-medium ${theme.textPrimary}`}>No results found</h3>
+          <p className={`mt-1 text-sm ${theme.textSecondary}`}>
+            Try adjusting your search or filters.
+          </p>
+        </div>
+      )}
+
+      {/* Table - only show if there are results */}
+      {filteredStacks.length > 0 && (
       <div className={`${theme.card} overflow-hidden`}>
         <table className="min-w-full divide-y divide-everforest-bg3">
           <thead className={`${theme.bgSecondary}`}>
@@ -81,7 +226,7 @@ export function StacksListPage() {
             </tr>
           </thead>
           <tbody className={`divide-y divide-everforest-bg3`}>
-            {stacks.map((stack) => {
+            {paginatedStacks.map((stack) => {
               const basePR = stack.prs[0];
               const hasMultiplePRs = stack.prs.length > 1;
 
@@ -162,6 +307,55 @@ export function StacksListPage() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* Pagination Controls */}
+      {filteredStacks.length > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6 px-4">
+          <div className={`text-sm ${theme.textSecondary}`}>
+            Showing {startIndex + 1} to {Math.min(endIndex, totalStacks)} of {totalStacks} stacks
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                page === 1
+                  ? `${theme.textMuted} cursor-not-allowed`
+                  : `${theme.textPrimary} ${theme.buttonSecondary} hover:bg-everforest-bg3`
+              }`}
+            >
+              Previous
+            </button>
+            <div className="flex gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    page === pageNum
+                      ? 'bg-everforest-green text-everforest-bg0'
+                      : `${theme.textPrimary} ${theme.buttonSecondary} hover:bg-everforest-bg3`
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                page === totalPages
+                  ? `${theme.textMuted} cursor-not-allowed`
+                  : `${theme.textPrimary} ${theme.buttonSecondary} hover:bg-everforest-bg3`
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
