@@ -6,6 +6,8 @@ import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, useP
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
+import { SyntaxHighlightedLine } from '../components/SyntaxHighlightedLine';
+import { getLanguageFromFilename } from '../lib/languageMapper';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
 interface FileTreeNode {
@@ -970,6 +972,7 @@ export function StackDetailPage() {
               <div className="space-y-4">
                 {diff.map((file) => {
                   const { leftLines, rightLines } = file.patch ? parseDiffForSplitView(file.patch) : { leftLines: [], rightLines: [] };
+                  const language = getLanguageFromFilename(file.filename);
 
                   return (
                     <div
@@ -1071,7 +1074,13 @@ export function StackDetailPage() {
                                         line.type === 'empty' ? theme.textMuted :
                                         theme.textSecondary
                                       }`}>
-                                        {line.content || ' '}
+                                        {line.type === 'context' && line.content.startsWith('@@') ? (
+                                          line.content || ' '
+                                        ) : line.type === 'empty' || !line.content ? (
+                                          ' '
+                                        ) : (
+                                          <SyntaxHighlightedLine code={line.content} language={language} />
+                                        )}
                                       </span>
                                     </div>
                                     {lineComments.length > 0 && (
@@ -1275,7 +1284,13 @@ export function StackDetailPage() {
                                         line.type === 'empty' ? theme.textMuted :
                                         theme.textSecondary
                                       }`}>
-                                        {line.content || ' '}
+                                        {line.type === 'context' && line.content.startsWith('@@') ? (
+                                          line.content || ' '
+                                        ) : line.type === 'empty' || !line.content ? (
+                                          ' '
+                                        ) : (
+                                          <SyntaxHighlightedLine code={line.content} language={language} />
+                                        )}
                                       </span>
                                     </div>
                                     {lineComments.length > 0 && (
