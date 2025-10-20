@@ -147,6 +147,11 @@ export const prsAPI = {
       method: 'POST',
     }),
 
+  closePR: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<GithubPR>(`/prs/${prNumber}/close?owner=${owner}&repo=${repo}`, {
+      method: 'POST',
+    }),
+
   requestReviewers: (owner: string, repo: string, prNumber: number, reviewers: string[]) =>
     fetchAPI<{ success: boolean }>(`/prs/${prNumber}/reviewers?owner=${owner}&repo=${repo}`, {
       method: 'POST',

@@ -638,6 +638,29 @@ export class GithubService {
     };
   }
 
+  async closePR(prNumber: number): Promise<GithubPR> {
+    this.ensureConfigured();
+
+    try {
+      const { data } = await this.octokit!.pulls.update({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        state: 'closed',
+      });
+
+      return this.mapPRResponse(data);
+    } catch (error: any) {
+      if (error.status === 404) {
+        throw new Error(`Pull request #${prNumber} not found.`);
+      }
+      if (error.status === 403) {
+        throw new Error('You do not have permission to close this pull request.');
+      }
+      throw error;
+    }
+  }
+
   /**
    * Fetches conversation threads for a PR with resolution status using GraphQL
    */

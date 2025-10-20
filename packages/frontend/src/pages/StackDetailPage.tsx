@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useClosePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
@@ -179,6 +179,9 @@ export function StackDetailPage() {
 
   // Approve PR mutation
   const approvePR = useApprovePR(owner || '', repo || '', currentPRNumber || 0);
+
+  // Close PR mutation
+  const closePR = useClosePR(owner || '', repo || '', currentPRNumber || 0);
 
   // Request reviewers mutation
   const requestReviewers = useRequestReviewers(owner || '', repo || '', currentPRNumber || 0);
@@ -1719,20 +1722,41 @@ export function StackDetailPage() {
       {/* Extra scrolling space */}
       <div className="h-[50vh]"></div>
 
-      {/* Sticky Approve Button - only show if current user is not the PR author */}
-      {selectedPR && config?.currentUser && selectedPR.user.login !== config.currentUser && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-          <button
-            onClick={() => approvePR.mutate()}
-            disabled={approvePR.isPending}
-            className={`px-6 py-3 rounded-lg font-medium shadow-lg transition-colors ${
-              approvePR.isPending
-                ? 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
-                : 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
-            }`}
-          >
-            {approvePR.isPending ? 'Approving...' : '✓ Approve PR'}
-          </button>
+      {/* Sticky Action Buttons */}
+      {selectedPR && config?.currentUser && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 flex gap-3">
+          {/* Close PR button - only show if current user IS the PR author */}
+          {selectedPR.user.login === config.currentUser && (
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to close this pull request?')) {
+                  closePR.mutate();
+                }
+              }}
+              disabled={closePR.isPending || selectedPR.state === 'closed'}
+              className={`px-6 py-3 rounded-lg font-medium shadow-lg transition-colors ${
+                closePR.isPending || selectedPR.state === 'closed'
+                  ? 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
+                  : 'bg-everforest-red text-everforest-bg0 hover:bg-everforest-red/90'
+              }`}
+            >
+              {closePR.isPending ? 'Closing...' : selectedPR.state === 'closed' ? '✗ PR Closed' : '✗ Close PR'}
+            </button>
+          )}
+          {/* Approve PR button - only show if current user is NOT the PR author */}
+          {selectedPR.user.login !== config.currentUser && (
+            <button
+              onClick={() => approvePR.mutate()}
+              disabled={approvePR.isPending}
+              className={`px-6 py-3 rounded-lg font-medium shadow-lg transition-colors ${
+                approvePR.isPending
+                  ? 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
+                  : 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
+              }`}
+            >
+              {approvePR.isPending ? 'Approving...' : '✓ Approve PR'}
+            </button>
+          )}
         </div>
       )}
     </div>
