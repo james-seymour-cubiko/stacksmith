@@ -40,7 +40,7 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
             {checkRuns.filter((check) => check.conclusion !== 'success').map((check) => {
               const isSuccess = check.conclusion === 'success';
               const isFailure = check.conclusion === 'failure';
