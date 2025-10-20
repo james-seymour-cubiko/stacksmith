@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { prsAPI } from '../lib/api';
+import { GithubReview } from '@review-app/shared';
 
 export function usePRs(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
   return useQuery({
@@ -30,6 +31,38 @@ export function usePRReviews(owner: string | undefined, repo: string | undefined
     queryFn: () => prsAPI.getReviews(owner!, repo!, prNumber!),
     enabled: !!owner && !!repo && !!prNumber,
   });
+}
+
+/**
+ * Fetches reviews for multiple PRs in parallel.
+ * Returns a map of PR number to reviews array.
+ */
+export function useBulkPRReviews(owner: string | undefined, repo: string | undefined, prNumbers: number[]) {
+  const queries = useQueries({
+    queries: prNumbers.map((prNumber) => ({
+      queryKey: ['prs', owner, repo, prNumber, 'reviews'],
+      queryFn: () => prsAPI.getReviews(owner!, repo!, prNumber),
+      enabled: !!owner && !!repo,
+    })),
+  });
+
+  // Convert to a map for easy lookup
+  const reviewsMap = new Map<number, GithubReview[]>();
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  queries.forEach((query, index) => {
+    if (query.data) {
+      reviewsMap.set(prNumbers[index], query.data);
+    }
+  });
+
+  return {
+    reviewsMap,
+    isLoading,
+    isError,
+    queries,
+  };
 }
 
 export function usePRComments(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {

@@ -1,6 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { theme } from '../lib/theme';
-import type { GithubCheckRun } from '../../../shared/src/types';
+import type { GithubCheckRun, GithubReview, ReviewStatusInfo } from '../../../shared/src/types';
+import { useBulkPRReviews } from '../hooks/usePRs';
+import { computeReviewStatus } from '../lib/reviewStatus';
+import { ReviewStatusBadge } from './ReviewStatusBadge';
 
 interface PRItemProps {
   pr: any;
@@ -13,6 +16,8 @@ interface PRItemProps {
   currentUser?: string;
   owner: string;
   repo: string;
+  reviewStatus?: ReviewStatusInfo;
+  reviewsMap: Map<number, GithubReview[]>;
 }
 
 // Hook to get CI status for a PR
@@ -85,7 +90,7 @@ function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string;
   );
 }
 
-function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo }: PRItemProps) {
+function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo, reviewStatus, reviewsMap }: PRItemProps) {
   const queryClient = useQueryClient();
 
   // Calculate how many branches need to be merged (from base to current, excluding already merged)
@@ -188,6 +193,28 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
           break;
         }
       }
+
+      // Check review status for this PR
+      const reviews = reviewsMap.get(checkPr.number);
+      if (reviews) {
+        const prReviewStatus = computeReviewStatus(reviews);
+
+        if (prReviewStatus.status === 'CHANGES_REQUESTED') {
+          mergeButtonText = '⚠ Changes Requested';
+          mergeButtonTooltip = `PR #${checkPr.number} has ${prReviewStatus.changesRequestedCount} change${prReviewStatus.changesRequestedCount > 1 ? 's' : ''} requested. Address the requested changes before merging.`;
+          mergeButtonDisabled = true;
+          canMerge = false;
+          break;
+        }
+
+        if (prReviewStatus.status !== 'APPROVED') {
+          mergeButtonText = '⚠ Needs Approval';
+          mergeButtonTooltip = `PR #${checkPr.number} needs at least one approval before merging.`;
+          mergeButtonDisabled = true;
+          canMerge = false;
+          break;
+        }
+      }
     }
 
     // If no blockers found, ready to merge
@@ -247,6 +274,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
                 {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Open'}
               </span>
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
+              {reviewStatus && <ReviewStatusBadge reviewStatus={reviewStatus} />}
               <span className={`font-medium ${theme.textPrimary} truncate`}>
                 #{pr.number} {pr.title}
               </span>
@@ -287,6 +315,10 @@ interface PRListProps {
 }
 
 export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, mergePending, currentUser, owner, repo }: PRListProps) {
+  // Fetch reviews for all PRs in the stack
+  const prNumbers = sortedPRs.map((pr) => pr.number);
+  const { reviewsMap, isLoading } = useBulkPRReviews(owner, repo, prNumbers);
+
   return (
     <div className="px-6 py-4">
       <h2 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>
@@ -294,21 +326,29 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
       </h2>
 
       <div className="space-y-2">
-        {sortedPRs.map((pr, index) => (
-          <PRItem
-            key={pr.number}
-            pr={pr}
-            index={index}
-            isSelected={pr.number === currentPRNumber}
-            onSelect={onSelectPR}
-            onMerge={onMergePR}
-            mergePending={mergePending}
-            sortedPRs={sortedPRs}
-            currentUser={currentUser}
-            owner={owner}
-            repo={repo}
-          />
-        ))}
+        {sortedPRs.map((pr, index) => {
+          // Compute review status for this PR
+          const reviews = reviewsMap.get(pr.number) || [];
+          const reviewStatus = reviews.length > 0 ? computeReviewStatus(reviews) : undefined;
+
+          return (
+            <PRItem
+              key={pr.number}
+              pr={pr}
+              index={index}
+              isSelected={pr.number === currentPRNumber}
+              onSelect={onSelectPR}
+              onMerge={onMergePR}
+              mergePending={mergePending}
+              sortedPRs={sortedPRs}
+              currentUser={currentUser}
+              owner={owner}
+              repo={repo}
+              reviewStatus={reviewStatus}
+              reviewsMap={reviewsMap}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -20,6 +20,20 @@ export type PRState = 'open' | 'closed';
 
 export type PRReviewState = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
 
+export type CombinedReviewStatus =
+  | 'APPROVED'           // At least one approval, no changes requested
+  | 'CHANGES_REQUESTED'  // At least one changes requested review
+  | 'COMMENTED'          // Only comments, no approvals or changes requested
+  | 'NO_REVIEWS';        // No reviews submitted yet
+
+export interface ReviewStatusInfo {
+  status: CombinedReviewStatus;
+  approvalCount: number;
+  changesRequestedCount: number;
+  commentedCount: number;
+  totalReviews: number;
+}
+
 export interface GithubPR {
   number: number;
   title: string;
