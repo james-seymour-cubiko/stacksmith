@@ -86,6 +86,24 @@ export interface GithubComment {
   path?: string;
   line?: number;
   commit_id?: string;
+  in_reply_to_id?: number;  // Parent comment ID for replies
+  conversation_id?: string;   // GitHub's conversation/thread ID (from GraphQL)
+}
+
+export interface CommentThread {
+  id: string;                     // Conversation ID from GitHub
+  parentComment: GithubComment;   // The first comment that started the thread
+  replies: GithubComment[];       // All replies in the thread
+  resolved: boolean;              // Whether the thread is marked as resolved
+  path: string;                   // File path where thread exists
+  line: number;                   // Line number where thread exists
+  unresolvedCount?: number;       // For aggregation purposes
+}
+
+export interface ThreadResolutionInfo {
+  totalThreads: number;
+  unresolvedCount: number;
+  byFile: Record<string, number>; // Map of filename -> unresolved count
 }
 
 export interface GithubCommit {

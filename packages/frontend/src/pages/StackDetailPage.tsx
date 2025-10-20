@@ -2,15 +2,20 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useRequestReviewers } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
 import { ReviewStatusPanel } from '../components/ReviewStatusPanel';
 import { SyntaxHighlightedLine } from '../components/SyntaxHighlightedLine';
 import { InlineDiffLine } from '../components/InlineDiffLine';
+import { ThreadList } from '../components/ThreadList';
+import { ThreadStatusBadge } from '../components/ThreadStatusBadge';
+import { ThreadResolutionButton } from '../components/ThreadResolutionButton';
+import { ThreadCountBadge } from '../components/ThreadCountBadge';
 import { getLanguageFromFilename } from '../lib/languageMapper';
 import { configAPI } from '../lib/api';
+import { getUnresolvedCountByFile, findThreadById } from '../lib/threadUtils';
 import DiffMatchPatch from 'diff-match-patch';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
@@ -150,6 +155,9 @@ export function StackDetailPage() {
   // Fetch check runs for selected PR
   const { data: checkRuns, isLoading: checkRunsLoading } = usePRCheckRuns(owner, repo, currentPRNumber);
 
+  // Fetch threads for selected PR
+  const { data: threads } = usePRThreads(owner, repo, currentPRNumber);
+
   // Create comment mutations
   const createComment = useCreatePRComment(owner || '', repo || '', currentPRNumber || 0);
   const createIssueComment = useCreatePRIssueComment(owner || '', repo || '', currentPRNumber || 0);
@@ -158,6 +166,10 @@ export function StackDetailPage() {
   const deleteComment = useDeleteComment(owner || '', repo || '', currentPRNumber || 0);
   const deleteIssueComment = useDeleteIssueComment(owner || '', repo || '', currentPRNumber || 0);
   const replyToComment = useReplyToComment(owner || '', repo || '', currentPRNumber || 0);
+
+  // Thread resolution mutations
+  const resolveThread = useResolveThread(owner || '', repo || '', currentPRNumber || 0);
+  const unresolveThread = useUnresolveThread(owner || '', repo || '', currentPRNumber || 0);
 
   // Merge PR mutation
   const mergePR = useMergePR();
@@ -216,6 +228,20 @@ export function StackDetailPage() {
       }
       return next;
     });
+  };
+
+  const handleThreadClick = (thread: any) => {
+    const fileElement = fileRefs.current[thread.path];
+    if (fileElement) {
+      // Expand the file if it's collapsed
+      if (!expandedFiles?.has(thread.path)) {
+        toggleFileExpanded(thread.path);
+      }
+      // Scroll to the file
+      setTimeout(() => {
+        fileElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100); // Small delay to allow file to expand
+    }
   };
 
   const expandAllFiles = () => {
@@ -872,6 +898,19 @@ export function StackDetailPage() {
         </div>
         )}
 
+        {/* Comment Threads */}
+        {selectedPR && threads && threads.length > 0 && (
+          <div className="mb-6">
+            <ThreadList
+              threads={threads}
+              onResolve={(threadId) => resolveThread.mutate(threadId)}
+              onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
+              onThreadClick={handleThreadClick}
+              isLoading={resolveThread.isPending || unresolveThread.isPending}
+            />
+          </div>
+        )}
+
         {/* PR-Level Comments */}
         {selectedPR && (
           <div className={`${theme.card} mb-6`}>
@@ -1152,6 +1191,10 @@ export function StackDetailPage() {
                   const { leftLines, rightLines } = file.patch ? parseDiffForSplitView(file.patch) : { leftLines: [], rightLines: [] };
                   const language = getLanguageFromFilename(file.filename);
 
+                  // Get unresolved thread count for this file
+                  const unresolvedCountMap = threads ? getUnresolvedCountByFile(threads) : new Map();
+                  const fileUnresolvedCount = unresolvedCountMap.get(file.filename) || 0;
+
                   return (
                     <div
                       key={file.filename}
@@ -1187,6 +1230,7 @@ export function StackDetailPage() {
                                 (renamed from {file.previous_filename})
                               </span>
                             )}
+                            <ThreadCountBadge unresolvedCount={fileUnresolvedCount} variant="fileHeader" />
                           </div>
                           <div className={`text-xs ${theme.textSecondary}`}>
                             <span className={theme.textSuccess}>+{file.additions}</span>
@@ -1266,8 +1310,13 @@ export function StackDetailPage() {
                                     </div>
                                     {lineComments.length > 0 && (
                                       <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-2`}>
-                                        {lineComments.map((comment) => (
-                                          <div key={comment.id} className={`border-l-2 border-everforest-blue pl-3`}>
+                                        {lineComments.map((comment) => {
+                                          // Find thread for this comment if it's a parent comment
+                                          const thread = threads?.find(t => t.parentComment.id === comment.id);
+                                          const isThreadParent = !!thread;
+
+                                          return (
+                                          <div key={comment.id} className={`border-l-2 ${thread && thread.resolved ? 'border-everforest-green' : 'border-everforest-blue'} pl-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
                                             <div className="flex items-start gap-2">
                                               <img
                                                 src={comment.user.avatar_url}
@@ -1275,18 +1324,19 @@ export function StackDetailPage() {
                                                 className="h-5 w-5 rounded-full flex-shrink-0"
                                               />
                                               <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 flex-wrap">
                                                   <span className={`text-xs font-medium ${theme.textPrimary}`}>
                                                     {comment.user.login}
                                                   </span>
                                                   <span className={`text-xs ${theme.textMuted}`}>
                                                     {new Date(comment.created_at).toLocaleString()}
                                                   </span>
+                                                  {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
                                                 </div>
                                                 <div className={`mt-1 text-xs ${theme.textSecondary} whitespace-pre-wrap`}>
                                                   {comment.body}
                                                 </div>
-                                                <div className="mt-1 flex items-center gap-2">
+                                                <div className="mt-1 flex items-center gap-2 flex-wrap">
                                                   <a
                                                     href={comment.html_url}
                                                     target="_blank"
@@ -1315,11 +1365,21 @@ export function StackDetailPage() {
                                                   >
                                                     Delete
                                                   </button>
+                                                  {isThreadParent && (
+                                                    <ThreadResolutionButton
+                                                      threadId={thread.id}
+                                                      resolved={thread.resolved}
+                                                      onResolve={(threadId) => resolveThread.mutate(threadId)}
+                                                      onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
+                                                      isLoading={resolveThread.isPending || unresolveThread.isPending}
+                                                    />
+                                                  )}
                                                 </div>
                                               </div>
                                             </div>
                                           </div>
-                                        ))}
+                                        );
+                                        })}
                                         {replyingToComment && lineComments.some(c => c.id === replyingToComment) && (
                                           <div className={`mt-2 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
                                             <textarea
@@ -1479,8 +1539,13 @@ export function StackDetailPage() {
                                     </div>
                                     {lineComments.length > 0 && (
                                       <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-2`}>
-                                        {lineComments.map((comment) => (
-                                          <div key={comment.id} className={`border-l-2 border-everforest-blue pl-3`}>
+                                        {lineComments.map((comment) => {
+                                          // Find thread for this comment if it's a parent comment
+                                          const thread = threads?.find(t => t.parentComment.id === comment.id);
+                                          const isThreadParent = !!thread;
+
+                                          return (
+                                          <div key={comment.id} className={`border-l-2 ${thread && thread.resolved ? 'border-everforest-green' : 'border-everforest-blue'} pl-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
                                             <div className="flex items-start gap-2">
                                               <img
                                                 src={comment.user.avatar_url}
@@ -1488,18 +1553,19 @@ export function StackDetailPage() {
                                                 className="h-5 w-5 rounded-full flex-shrink-0"
                                               />
                                               <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 flex-wrap">
                                                   <span className={`text-xs font-medium ${theme.textPrimary}`}>
                                                     {comment.user.login}
                                                   </span>
                                                   <span className={`text-xs ${theme.textMuted}`}>
                                                     {new Date(comment.created_at).toLocaleString()}
                                                   </span>
+                                                  {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
                                                 </div>
                                                 <div className={`mt-1 text-xs ${theme.textSecondary} whitespace-pre-wrap`}>
                                                   {comment.body}
                                                 </div>
-                                                <div className="mt-1 flex items-center gap-2">
+                                                <div className="mt-1 flex items-center gap-2 flex-wrap">
                                                   <a
                                                     href={comment.html_url}
                                                     target="_blank"
@@ -1528,11 +1594,21 @@ export function StackDetailPage() {
                                                   >
                                                     Delete
                                                   </button>
+                                                  {isThreadParent && (
+                                                    <ThreadResolutionButton
+                                                      threadId={thread.id}
+                                                      resolved={thread.resolved}
+                                                      onResolve={(threadId) => resolveThread.mutate(threadId)}
+                                                      onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
+                                                      isLoading={resolveThread.isPending || unresolveThread.isPending}
+                                                    />
+                                                  )}
                                                 </div>
                                               </div>
                                             </div>
                                           </div>
-                                        ))}
+                                        );
+                                        })}
                                         {replyingToComment && lineComments.some(c => c.id === replyingToComment) && (
                                           <div className={`mt-2 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
                                             <textarea

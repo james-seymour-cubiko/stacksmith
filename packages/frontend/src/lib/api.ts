@@ -8,6 +8,8 @@ import type {
   GithubCheckRun,
   ConfigureGithubRequest,
   GithubConfig,
+  CommentThread,
+  ThreadResolutionInfo,
   MultiRepoConfig,
 } from '@review-app/shared';
 
@@ -149,6 +151,23 @@ export const prsAPI = {
     fetchAPI<{ success: boolean }>(`/prs/${prNumber}/reviewers?owner=${owner}&repo=${repo}`, {
       method: 'POST',
       body: JSON.stringify({ reviewers }),
+    }),
+
+  // Thread operations
+  getThreads: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<CommentThread[]>(`/prs/${prNumber}/threads?owner=${owner}&repo=${repo}`),
+
+  getThreadResolutionInfo: (owner: string, repo: string, prNumber: number) =>
+    fetchAPI<ThreadResolutionInfo>(`/prs/${prNumber}/threads/resolution-info?owner=${owner}&repo=${repo}`),
+
+  resolveThread: (owner: string, repo: string, prNumber: number, threadId: string) =>
+    fetchAPI<{ success: boolean; resolved: boolean }>(`/prs/${prNumber}/threads/${threadId}/resolve?owner=${owner}&repo=${repo}`, {
+      method: 'POST',
+    }),
+
+  unresolveThread: (owner: string, repo: string, prNumber: number, threadId: string) =>
+    fetchAPI<{ success: boolean; resolved: boolean }>(`/prs/${prNumber}/threads/${threadId}/unresolve?owner=${owner}&repo=${repo}`, {
+      method: 'POST',
     }),
 };
 

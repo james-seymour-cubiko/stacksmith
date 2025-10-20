@@ -662,4 +662,142 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       }
     }
   );
+
+  // Get conversation threads for a PR
+  typedServer.get(
+    '/:prNumber/threads',
+    {
+      schema: {
+        description: 'Get conversation threads for a pull request',
+        tags: ['prs', 'threads'],
+        params: z.object({
+          prNumber: z.coerce.number(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        const threads = await service.getConversationThreads(prNumber);
+        return reply.send(threads);
+      } catch (error) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Failed to fetch conversation threads',
+          statusCode: 500,
+        });
+      }
+    }
+  );
+
+  // Get thread resolution info for a PR
+  typedServer.get(
+    '/:prNumber/threads/resolution-info',
+    {
+      schema: {
+        description: 'Get thread resolution summary for a pull request',
+        tags: ['prs', 'threads'],
+        params: z.object({
+          prNumber: z.coerce.number(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        const info = await service.getThreadResolutionInfo(prNumber);
+        return reply.send(info);
+      } catch (error) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Failed to fetch thread resolution info',
+          statusCode: 500,
+        });
+      }
+    }
+  );
+
+  // Resolve a conversation thread
+  typedServer.post(
+    '/:prNumber/threads/:threadId/resolve',
+    {
+      schema: {
+        description: 'Mark a conversation thread as resolved',
+        tags: ['prs', 'threads'],
+        params: z.object({
+          prNumber: z.coerce.number(),
+          threadId: z.string(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber, threadId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.resolveConversation(threadId);
+        return reply.code(200).send({ success: true, resolved: true });
+      } catch (error) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Failed to resolve thread',
+          statusCode: 500,
+        });
+      }
+    }
+  );
+
+  // Unresolve a conversation thread
+  typedServer.post(
+    '/:prNumber/threads/:threadId/unresolve',
+    {
+      schema: {
+        description: 'Mark a conversation thread as unresolved',
+        tags: ['prs', 'threads'],
+        params: z.object({
+          prNumber: z.coerce.number(),
+          threadId: z.string(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber, threadId } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        await service.unresolveConversation(threadId);
+        return reply.code(200).send({ success: true, resolved: false });
+      } catch (error) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Failed to unresolve thread',
+          statusCode: 500,
+        });
+      }
+    }
+  );
 };

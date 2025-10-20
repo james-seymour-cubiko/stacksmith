@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { theme } from '../lib/theme';
-import type { GithubCheckRun, GithubReview, ReviewStatusInfo } from '../../../shared/src/types';
-import { useBulkPRReviews } from '../hooks/usePRs';
+import type { GithubCheckRun, GithubReview, ReviewStatusInfo, CommentThread } from '../../../shared/src/types';
+import { useBulkPRReviews, useBulkPRThreads } from '../hooks/usePRs';
 import { computeReviewStatus } from '../lib/reviewStatus';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
+import { ThreadCountBadge } from './ThreadCountBadge';
 
 interface PRItemProps {
   pr: any;
@@ -18,6 +19,7 @@ interface PRItemProps {
   repo: string;
   reviewStatus?: ReviewStatusInfo;
   reviewsMap: Map<number, GithubReview[]>;
+  threadsMap: Map<number, CommentThread[]>;
 }
 
 // Hook to get CI status for a PR
@@ -90,13 +92,18 @@ function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string;
   );
 }
 
-function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo, reviewStatus, reviewsMap }: PRItemProps) {
+function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo, reviewStatus, reviewsMap, threadsMap }: PRItemProps) {
   const queryClient = useQueryClient();
 
   // Calculate how many branches need to be merged (from base to current, excluding already merged)
   const prsToMerge = sortedPRs.slice(0, index + 1).filter(p => !p.merged_at);
   const branchesToMerge = prsToMerge.length;
   const branchWord = branchesToMerge === 1 ? 'branch' : 'branches';
+
+  // Get threads for this PR
+  const threads = threadsMap.get(pr.number) || [];
+  const resolvedThreadCount = threads.filter(t => t.resolved).length;
+  const totalThreadCount = threads.length;
 
   const statusColor = pr.draft
     ? theme.statusDraft
@@ -215,6 +222,18 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
           break;
         }
       }
+
+      // Check thread resolution status for this PR
+      const prThreads = threadsMap.get(checkPr.number) || [];
+      const prUnresolvedCount = prThreads.filter(t => !t.resolved).length;
+
+      if (prUnresolvedCount > 0) {
+        mergeButtonText = '⚠ Unresolved Threads';
+        mergeButtonTooltip = `PR #${checkPr.number} has ${prUnresolvedCount} unresolved comment thread${prUnresolvedCount > 1 ? 's' : ''}. Resolve all threads before merging.`;
+        mergeButtonDisabled = true;
+        canMerge = false;
+        break;
+      }
     }
 
     // If no blockers found, ready to merge
@@ -275,6 +294,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               </span>
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               {reviewStatus && <ReviewStatusBadge reviewStatus={reviewStatus} />}
+              <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
               <span className={`font-medium ${theme.textPrimary} truncate`}>
                 #{pr.number} {pr.title}
               </span>
@@ -319,6 +339,9 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
   const prNumbers = sortedPRs.map((pr) => pr.number);
   const { reviewsMap, isLoading } = useBulkPRReviews(owner, repo, prNumbers);
 
+  // Fetch threads for all PRs in the stack
+  const { threadsMap } = useBulkPRThreads(owner, repo, prNumbers);
+
   return (
     <div className="px-6 py-4">
       <h2 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>
@@ -346,6 +369,7 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
               repo={repo}
               reviewStatus={reviewStatus}
               reviewsMap={reviewsMap}
+              threadsMap={threadsMap}
             />
           );
         })}

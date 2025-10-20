@@ -1,5 +1,5 @@
 import { Octokit } from '@octokit/rest';
-import type { GithubPR, GithubReview, GithubComment, GithubCommit, GithubDiff, GithubCheckRun } from '@review-app/shared';
+import type { GithubPR, GithubReview, GithubComment, GithubCommit, GithubDiff, GithubCheckRun, CommentThread, ThreadResolutionInfo } from '@review-app/shared';
 
 export class GithubService {
   private octokit: Octokit | null = null;
@@ -133,6 +133,7 @@ export class GithubService {
       path: comment.path,
       line: comment.line || undefined,
       commit_id: comment.commit_id,
+      in_reply_to_id: comment.in_reply_to_id || undefined,
     }));
   }
 
@@ -634,6 +635,207 @@ export class GithubService {
       state: data.state as 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING',
       html_url: data.html_url,
       submitted_at: data.submitted_at || new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Fetches conversation threads for a PR with resolution status using GraphQL
+   */
+  async getConversationThreads(prNumber: number): Promise<CommentThread[]> {
+    this.ensureConfigured();
+
+    // Get regular comments first
+    const comments = await this.getPRComments(prNumber);
+
+    // Filter only review comments that have a path (inline code comments)
+    const inlineComments = comments.filter(c => c.path);
+
+    // Use GraphQL to get conversation/thread data with resolution status
+    const query = `
+      query($owner: String!, $repo: String!, $prNumber: Int!) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $prNumber) {
+            reviewThreads(first: 100) {
+              nodes {
+                id
+                isResolved
+                isOutdated
+                comments(first: 50) {
+                  nodes {
+                    databaseId
+                    body
+                    path
+                    line
+                    author {
+                      login
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const result: any = await this.octokit!.graphql(query, {
+        owner: this.owner,
+        repo: this.repo,
+        prNumber,
+      });
+
+      const threads: CommentThread[] = [];
+      const reviewThreads = result.repository.pullRequest.reviewThreads.nodes;
+
+      for (const thread of reviewThreads) {
+        const threadCommentIds = thread.comments.nodes.map((c: any) => c.databaseId);
+
+        // Find the matching comments from our REST API comments
+        const threadComments = inlineComments.filter(c =>
+          threadCommentIds.includes(c.id)
+        );
+
+        if (threadComments.length > 0) {
+          // Sort by created_at to find parent
+          threadComments.sort((a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+
+          const parentComment = threadComments[0];
+          const replies = threadComments.slice(1);
+
+          threads.push({
+            id: thread.id,
+            parentComment: {
+              ...parentComment,
+              conversation_id: thread.id,
+            },
+            replies: replies.map(r => ({
+              ...r,
+              conversation_id: thread.id,
+            })),
+            resolved: thread.isResolved,
+            path: parentComment.path!,
+            line: parentComment.line!,
+          });
+        }
+      }
+
+      return threads;
+    } catch (error: any) {
+      console.error('Error fetching conversation threads:', error);
+      // Fallback: group comments manually without resolution status
+      return this.groupCommentsIntoThreadsFallback(inlineComments);
+    }
+  }
+
+  /**
+   * Fallback method to group comments into threads without GraphQL
+   */
+  private groupCommentsIntoThreadsFallback(comments: GithubComment[]): CommentThread[] {
+    const threads: CommentThread[] = [];
+    const threadMap = new Map<number, GithubComment[]>();
+
+    // Group by in_reply_to_id
+    for (const comment of comments) {
+      if (comment.in_reply_to_id) {
+        if (!threadMap.has(comment.in_reply_to_id)) {
+          threadMap.set(comment.in_reply_to_id, []);
+        }
+        threadMap.get(comment.in_reply_to_id)!.push(comment);
+      }
+    }
+
+    // Create threads
+    for (const comment of comments) {
+      if (!comment.in_reply_to_id && comment.path) {
+        // This is a parent comment
+        const replies = threadMap.get(comment.id) || [];
+        threads.push({
+          id: `fallback-${comment.id}`,
+          parentComment: comment,
+          replies,
+          resolved: false, // Can't determine without GraphQL
+          path: comment.path,
+          line: comment.line!,
+        });
+      }
+    }
+
+    return threads;
+  }
+
+  /**
+   * Resolves a conversation thread using GraphQL
+   */
+  async resolveConversation(threadId: string): Promise<void> {
+    this.ensureConfigured();
+
+    const mutation = `
+      mutation($threadId: ID!) {
+        resolveReviewThread(input: { threadId: $threadId }) {
+          thread {
+            id
+            isResolved
+          }
+        }
+      }
+    `;
+
+    try {
+      await this.octokit!.graphql(mutation, { threadId });
+    } catch (error: any) {
+      console.error('Error resolving conversation:', error);
+      throw new Error(`Failed to resolve thread: ${error.message}`);
+    }
+  }
+
+  /**
+   * Unresolves a conversation thread using GraphQL
+   */
+  async unresolveConversation(threadId: string): Promise<void> {
+    this.ensureConfigured();
+
+    const mutation = `
+      mutation($threadId: ID!) {
+        unresolveReviewThread(input: { threadId: $threadId }) {
+          thread {
+            id
+            isResolved
+          }
+        }
+      }
+    `;
+
+    try {
+      await this.octokit!.graphql(mutation, { threadId });
+    } catch (error: any) {
+      console.error('Error unresolving conversation:', error);
+      throw new Error(`Failed to unresolve thread: ${error.message}`);
+    }
+  }
+
+  /**
+   * Computes thread resolution info for a PR
+   */
+  async getThreadResolutionInfo(prNumber: number): Promise<ThreadResolutionInfo> {
+    const threads = await this.getConversationThreads(prNumber);
+
+    const totalThreads = threads.length;
+    const unresolvedCount = threads.filter(t => !t.resolved).length;
+    const byFile: Record<string, number> = {};
+
+    for (const thread of threads) {
+      if (!thread.resolved) {
+        byFile[thread.path] = (byFile[thread.path] || 0) + 1;
+      }
+    }
+
+    return {
+      totalThreads,
+      unresolvedCount,
+      byFile,
     };
   }
 }

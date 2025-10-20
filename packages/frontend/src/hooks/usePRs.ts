@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { prsAPI } from '../lib/api';
-import { GithubReview } from '@review-app/shared';
+import { GithubReview, CommentThread, ThreadResolutionInfo } from '@review-app/shared';
 
 export function usePRs(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
   return useQuery({
@@ -218,6 +218,91 @@ export function useReplyToComment(owner: string, repo: string, prNumber: number)
     mutationFn: ({ commentId, body }: { commentId: number; body: string }) =>
       prsAPI.replyToComment(owner, repo, prNumber, commentId, body),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
+    },
+  });
+}
+
+/**
+ * Fetches conversation threads for a PR
+ */
+export function usePRThreads(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
+  return useQuery({
+    queryKey: ['prs', owner, repo, prNumber, 'threads'],
+    queryFn: () => prsAPI.getThreads(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
+  });
+}
+
+/**
+ * Fetches thread resolution info for a PR
+ */
+export function usePRThreadResolutionInfo(owner: string | undefined, repo: string | undefined, prNumber: number | undefined) {
+  return useQuery({
+    queryKey: ['prs', owner, repo, prNumber, 'thread-resolution-info'],
+    queryFn: () => prsAPI.getThreadResolutionInfo(owner!, repo!, prNumber!),
+    enabled: !!owner && !!repo && !!prNumber,
+  });
+}
+
+/**
+ * Fetches threads for multiple PRs in parallel
+ */
+export function useBulkPRThreads(owner: string | undefined, repo: string | undefined, prNumbers: number[]) {
+  const queries = useQueries({
+    queries: prNumbers.map((prNumber) => ({
+      queryKey: ['prs', owner, repo, prNumber, 'threads'],
+      queryFn: () => prsAPI.getThreads(owner!, repo!, prNumber),
+      enabled: !!owner && !!repo,
+    })),
+  });
+
+  // Convert to a map for easy lookup
+  const threadsMap = new Map<number, CommentThread[]>();
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  queries.forEach((query, index) => {
+    if (query.data) {
+      threadsMap.set(prNumbers[index], query.data);
+    }
+  });
+
+  return {
+    threadsMap,
+    isLoading,
+    isError,
+    queries,
+  };
+}
+
+/**
+ * Mutation to resolve a thread
+ */
+export function useResolveThread(owner: string, repo: string, prNumber: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (threadId: string) => prsAPI.resolveThread(owner, repo, prNumber, threadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'threads'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'thread-resolution-info'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
+    },
+  });
+}
+
+/**
+ * Mutation to unresolve a thread
+ */
+export function useUnresolveThread(owner: string, repo: string, prNumber: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (threadId: string) => prsAPI.unresolveThread(owner, repo, prNumber, threadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'threads'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'thread-resolution-info'] });
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
     },
   });
