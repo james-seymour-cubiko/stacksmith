@@ -52,7 +52,7 @@ npm run dev
 Or run them separately:
 
 ```bash
-# Backend only (runs on http://127.0.0.1:3001)
+# Backend only (runs on http://127.0.0.1:3003)
 npm run dev:backend
 
 # Frontend only (runs on http://localhost:5173)
@@ -72,7 +72,7 @@ npm run dev:frontend
 
 ## API Documentation
 
-Once the backend is running, visit http://127.0.0.1:3001/documentation for interactive API documentation.
+Once the backend is running, visit http://127.0.0.1:3003/documentation for interactive API documentation.
 
 ## Available Scripts
 

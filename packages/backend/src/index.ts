@@ -14,7 +14,7 @@ import type { RepoIdentifier } from '@review-app/shared';
 // Load .env.local file
 config({ path: resolve(process.cwd(), '.env.local') });
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3003;
 const HOST = process.env.HOST || '127.0.0.1';
 
 async function buildServer() {
