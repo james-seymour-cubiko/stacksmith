@@ -177,6 +177,18 @@ export function useApprovePR(owner: string, repo: string, prNumber: number) {
   });
 }
 
+export function useClosePR(owner: string, repo: string, prNumber: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => prsAPI.closePR(owner, repo, prNumber),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prs'] });
+      queryClient.invalidateQueries({ queryKey: ['stacks'] });
+    },
+  });
+}
+
 export function useRequestReviewers(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
 

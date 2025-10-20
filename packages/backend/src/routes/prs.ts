@@ -625,6 +625,40 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
     }
   );
 
+  // Close pull request
+  typedServer.post(
+    '/:prNumber/close',
+    {
+      schema: {
+        description: 'Close a pull request',
+        tags: ['prs'],
+        params: z.object({
+          prNumber: z.coerce.number().int().positive(),
+        }),
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { prNumber } = request.params;
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+
+        const pr = await service.closePR(prNumber);
+        return reply.code(200).send(pr);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'Bad Request',
+          message: error instanceof Error ? error.message : 'Failed to close PR',
+          statusCode: 400,
+        });
+      }
+    }
+  );
+
   // Request reviewers for a pull request
   typedServer.post(
     '/:prNumber/reviewers',
