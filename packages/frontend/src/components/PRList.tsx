@@ -1,44 +1,10 @@
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { theme } from '../lib/theme';
 import type { GithubCheckRun, GithubReview, ReviewStatusInfo, CommentThread } from '../../../shared/src/types';
 import { useBulkPRReviews, useBulkPRThreads } from '../hooks/usePRs';
 import { computeReviewStatus } from '../lib/reviewStatus';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { ThreadCountBadge } from './ThreadCountBadge';
-
-// Branch copy button - shows truncated branch name, copies on click
-function BranchCopyButton({ branchName }: { branchName: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(branchName);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 500);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  // Truncate branch name if too long
-  const truncatedName = branchName.length > 18 ? branchName.substring(0, 18) + '...' : branchName;
-
-  return (
-    <button
-      onClick={handleCopy}
-      className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
-        copied
-          ? 'bg-everforest-green/20 text-everforest-green'
-          : 'bg-everforest-bg3/50 text-everforest-grey1 hover:bg-everforest-bg3 hover:text-everforest-fg'
-      }`}
-      title={copied ? `Copied: ${branchName}` : `Click to copy branch: ${branchName}`}
-    >
-      {copied ? '✓ Copied' : truncatedName}
-    </button>
-  );
-}
 
 interface PRItemProps {
   pr: any;
@@ -428,7 +394,6 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               <ReviewStatusBadge reviewStatus={reviewStatus} isLoading={reviewsLoading} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
-              <BranchCopyButton branchName={pr.head.ref} />
             </div>
             {/* Title on second line */}
             <div className={`font-medium ${theme.textPrimary} break-words flex items-center gap-1.5`}>
@@ -471,9 +436,11 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
 
   return (
     <div className="px-6 py-4">
-      <h2 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>
-        Pull Requests in Stack ({sortedPRs.length})
-      </h2>
+      <div className="mb-3">
+        <h2 className={`text-sm font-medium ${theme.textPrimary} mb-2`}>
+          Pull Requests in Stack ({sortedPRs.length})
+        </h2>
+      </div>
 
       <div className="space-y-2">
         {sortedPRs.map((pr, index) => {

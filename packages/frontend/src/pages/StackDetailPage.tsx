@@ -944,6 +944,8 @@ export function StackDetailPage() {
               currentUser={config?.currentUser}
               owner={owner!}
               repo={repo!}
+              selectedPR={selectedPR}
+              currentPRDetails={currentPRDetails}
             />
           </div>
 
@@ -1259,47 +1261,6 @@ export function StackDetailPage() {
 
           {/* Center - Diff Viewer */}
           <div className={`flex-1 min-w-0 ${theme.card}`}>
-            <div className={`px-6 py-4 border-b ${theme.border}`}>
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h2 className={`text-lg font-medium ${theme.textPrimary}`}>
-                  #{selectedPR.number} {selectedPR.title}
-                </h2>
-                <div className={`mt-2 flex items-center gap-4 text-sm ${theme.textSecondary}`}>
-                  <span className="flex items-center gap-1">
-                    <img
-                      src={selectedPR.user.avatar_url}
-                      alt={selectedPR.user.login}
-                      className="h-5 w-5 rounded-full"
-                    />
-                    {selectedPR.user.login}
-                  </span>
-                  <span>{selectedPR.head.ref} → {selectedPR.base.ref}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* PR Stats */}
-            {currentPRDetails && (
-              <div className={`mt-3 pt-3 border-t ${theme.border}`}>
-                <div className="flex items-center gap-6 text-sm">
-                  <span className="flex items-center gap-1">
-                    <strong>{currentPRDetails.commits}</strong> commits
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <strong>{currentPRDetails.changed_files}</strong> files
-                  </span>
-                  <span className={theme.textSuccess}>
-                    <strong>+{currentPRDetails.additions}</strong>
-                  </span>
-                  <span className={theme.textError}>
-                    <strong>-{currentPRDetails.deletions}</strong>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* File Changes */}
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
@@ -1357,6 +1318,20 @@ export function StackDetailPage() {
                             <span className={`text-xs ${theme.textSecondary}`}>
                               {expandedFiles?.has(file.filename) ? '▼' : '▶'}
                             </span>
+                            <FilenameCopyButton filename={file.filename} />
+                            {file.previous_filename && (
+                              <span className={`text-xs ${theme.textSecondary}`}>
+                                (renamed from {file.previous_filename})
+                              </span>
+                            )}
+                            <ThreadCountBadge unresolvedCount={fileUnresolvedCount} variant="fileHeader" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs ${theme.textSecondary}`}>
+                              <span className={theme.textSuccess}>+{file.additions}</span>
+                              {' / '}
+                              <span className={theme.textError}>-{file.deletions}</span>
+                            </span>
                             <span
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 file.status === 'added'
@@ -1370,18 +1345,6 @@ export function StackDetailPage() {
                             >
                               {file.status}
                             </span>
-                            <FilenameCopyButton filename={file.filename} />
-                            {file.previous_filename && (
-                              <span className={`text-xs ${theme.textSecondary}`}>
-                                (renamed from {file.previous_filename})
-                              </span>
-                            )}
-                            <ThreadCountBadge unresolvedCount={fileUnresolvedCount} variant="fileHeader" />
-                          </div>
-                          <div className={`text-xs ${theme.textSecondary}`}>
-                            <span className={theme.textSuccess}>+{file.additions}</span>
-                            {' / '}
-                            <span className={theme.textError}>-{file.deletions}</span>
                           </div>
                         </div>
                       </button>
