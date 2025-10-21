@@ -138,6 +138,7 @@ export function useCreatePRComment(owner: string, repo: string, prNumber: number
     }) => prsAPI.createComment(owner, repo, prNumber, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'threads'] });
     },
   });
 }
@@ -208,6 +209,7 @@ export function useDeleteComment(owner: string, repo: string, prNumber: number) 
     mutationFn: (commentId: number) => prsAPI.deleteComment(owner, repo, prNumber, commentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'threads'] });
     },
   });
 }
@@ -231,6 +233,7 @@ export function useReplyToComment(owner: string, repo: string, prNumber: number)
       prsAPI.replyToComment(owner, repo, prNumber, commentId, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'threads'] });
     },
   });
 }

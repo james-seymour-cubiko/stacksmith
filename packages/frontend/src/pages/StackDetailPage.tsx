@@ -250,6 +250,36 @@ export function StackDetailPage() {
   // Track comments section collapse state
   const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
 
+  // Track collapsed threads (threadId -> boolean)
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
+
+  // Auto-collapse resolved threads
+  useEffect(() => {
+    if (threads) {
+      setCollapsedThreads((prev) => {
+        const next = new Set(prev);
+        threads.forEach((thread) => {
+          if (thread.resolved) {
+            next.add(thread.id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [threads]);
+
+  const toggleThreadCollapse = (threadId: string) => {
+    setCollapsedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(threadId)) {
+        next.delete(threadId);
+      } else {
+        next.add(threadId);
+      }
+      return next;
+    });
+  };
+
   // Track expanded files in diff view (files are collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string> | null>(null);
 
@@ -1055,6 +1085,14 @@ export function StackDetailPage() {
                     <textarea
                       value={issueReplyBody}
                       onChange={(e) => setIssueReplyBody(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && e.ctrlKey && issueReplyBody.trim() && !createIssueComment.isPending) {
+                          e.preventDefault();
+                          await createIssueComment.mutateAsync(issueReplyBody);
+                          setReplyingToIssueComment(null);
+                          setIssueReplyBody('');
+                        }
+                      }}
                       placeholder="Write a reply..."
                       className={`w-full p-3 border ${theme.border} rounded text-sm ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
                       rows={4}
@@ -1106,6 +1144,12 @@ export function StackDetailPage() {
                 <textarea
                   value={prCommentBody}
                   onChange={(e) => setPRCommentBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.ctrlKey && prCommentBody.trim() && !createIssueComment.isPending) {
+                      e.preventDefault();
+                      handleSubmitPRComment();
+                    }
+                  }}
                   placeholder="Add a comment to this pull request..."
                   className={`w-full p-3 border ${theme.border} rounded text-sm ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
                   rows={4}
@@ -1329,11 +1373,11 @@ export function StackDetailPage() {
                                   line.lineNum >= Math.min(selectingLines.startLine, selectingLines.currentLine) &&
                                   line.lineNum <= Math.max(selectingLines.startLine, selectingLines.currentLine);
 
-                                // Find existing comments for this line
-                                // For the left side, only show comments with side === 'LEFT'
-                                const lineComments = inlineComments.filter(
-                                  (c) => c.path === file.filename && c.line === line.lineNum && c.side === 'LEFT'
-                                );
+                                // Find existing threads for this line
+                                // For the left side, only show threads with side === 'LEFT'
+                                const lineThreads = threads?.filter(
+                                  (t) => t.path === file.filename && t.line === line.lineNum && t.parentComment.side === 'LEFT'
+                                ) || [];
 
                                 return (
                                   <div key={index}>
@@ -1366,119 +1410,220 @@ export function StackDetailPage() {
                                         )}
                                       </span>
                                     </div>
-                                    {lineComments.length > 0 && (
-                                      <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-2`}>
-                                        {lineComments.map((comment) => {
-                                          // Find thread for this comment if it's a parent comment
-                                          const thread = threads?.find(t => t.parentComment.id === comment.id);
-                                          const isThreadParent = !!thread;
-
+                                    {lineThreads.length > 0 && (
+                                      <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-3`}>
+                                        {lineThreads.map((thread) => {
+                                          const isCollapsed = collapsedThreads.has(thread.id);
                                           return (
-                                          <div key={comment.id} className={`border-2 ${thread && thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg p-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
-                                            <div className="flex items-start gap-2">
-                                              <img
-                                                src={comment.user.avatar_url}
-                                                alt={comment.user.login}
-                                                className="h-5 w-5 rounded-full flex-shrink-0"
-                                              />
-                                              <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className={`text-xs font-medium ${theme.textPrimary}`}>
-                                                    {comment.user.login}
-                                                  </span>
+                                          <div key={thread.id} className={`border-2 ${thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg ${thread.resolved ? 'opacity-75' : ''}`}>
+                                            {/* Thread Header */}
+                                            <div
+                                              className={`p-2 border-b ${theme.border} bg-everforest-bg1/30 flex items-center justify-between cursor-pointer hover:bg-everforest-bg2 transition-colors`}
+                                              onClick={() => toggleThreadCollapse(thread.id)}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <span className={`text-xs ${theme.textMuted}`}>
+                                                  {isCollapsed ? '▶' : '▼'}
+                                                </span>
+                                                <span className={`text-xs font-medium ${theme.textPrimary}`}>
+                                                  {thread.parentComment.user.login}
+                                                </span>
+                                                <ThreadStatusBadge resolved={thread.resolved} />
+                                                {thread.replies.length > 0 && (
                                                   <span className={`text-xs ${theme.textMuted}`}>
-                                                    {new Date(comment.created_at).toLocaleString()}
+                                                    ({thread.replies.length + 1} comment{thread.replies.length + 1 !== 1 ? 's' : ''})
                                                   </span>
-                                                  {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
-                                                </div>
-                                                <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
-                                                  {comment.body}
-                                                </div>
-                                                <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                                  <a
-                                                    href={comment.html_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className={`text-xs ${theme.textLink}`}
-                                                  >
-                                                    View on GitHub →
-                                                  </a>
-                                                  <button
-                                                    onClick={() => {
-                                                      setReplyingToComment(comment.id);
-                                                      setReplyBody('');
-                                                    }}
-                                                    className={`text-xs ${theme.textMuted} hover:text-everforest-green`}
-                                                  >
-                                                    Reply
-                                                  </button>
-                                                  <button
-                                                    onClick={() => {
-                                                      if (confirm('Are you sure you want to delete this comment?')) {
-                                                        deleteComment.mutate(comment.id);
-                                                      }
-                                                    }}
-                                                    disabled={deleteComment.isPending}
-                                                    className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
-                                                  >
-                                                    Delete
-                                                  </button>
-                                                  {isThreadParent && (
-                                                    <ThreadResolutionButton
-                                                      threadId={thread.id}
-                                                      resolved={thread.resolved}
-                                                      onResolve={(threadId) => resolveThread.mutate(threadId)}
-                                                      onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
-                                                      isLoading={resolveThread.isPending || unresolveThread.isPending}
-                                                    />
-                                                  )}
+                                                )}
+                                              </div>
+                                              <span className={`text-xs ${theme.textMuted}`}>
+                                                {new Date(thread.parentComment.created_at).toLocaleString()}
+                                              </span>
+                                            </div>
+
+                                            {/* Thread Content */}
+                                            {!isCollapsed && (
+                                            <>
+                                            {/* Parent Comment */}
+                                            <div className="p-3">
+                                              <div className="flex items-start gap-2">
+                                                <img
+                                                  src={thread.parentComment.user.avatar_url}
+                                                  alt={thread.parentComment.user.login}
+                                                  className="h-5 w-5 rounded-full flex-shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                  <div className={`text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
+                                                    {thread.parentComment.body}
+                                                  </div>
+                                                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                                    <a
+                                                      href={thread.parentComment.html_url}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className={`text-xs ${theme.textLink}`}
+                                                    >
+                                                      View on GitHub →
+                                                    </a>
+                                                    <button
+                                                      onClick={() => {
+                                                        if (confirm('Are you sure you want to delete this comment?')) {
+                                                          deleteComment.mutate(thread.parentComment.id);
+                                                        }
+                                                      }}
+                                                      disabled={deleteComment.isPending}
+                                                      className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
+                                                    >
+                                                      Delete
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               </div>
                                             </div>
+
+                                            {/* Replies */}
+                                            {thread.replies.length > 0 && (
+                                              <div className={`border-t ${theme.border} bg-everforest-bg1/50`}>
+                                                {thread.replies.map((reply) => (
+                                                  <div key={reply.id} className={`p-3 border-b last:border-b-0 ${theme.border}`}>
+                                                    <div className="flex items-start gap-2">
+                                                      <img
+                                                        src={reply.user.avatar_url}
+                                                        alt={reply.user.login}
+                                                        className="h-5 w-5 rounded-full flex-shrink-0"
+                                                      />
+                                                      <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                          <span className={`text-xs font-medium ${theme.textPrimary}`}>
+                                                            {reply.user.login}
+                                                          </span>
+                                                          <span className={`text-xs ${theme.textMuted}`}>
+                                                            {new Date(reply.created_at).toLocaleString()}
+                                                          </span>
+                                                        </div>
+                                                        <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
+                                                          {reply.body}
+                                                        </div>
+                                                        <div className="mt-1 flex items-center gap-2">
+                                                          <a
+                                                            href={reply.html_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className={`text-xs ${theme.textLink}`}
+                                                          >
+                                                            View on GitHub →
+                                                          </a>
+                                                          <button
+                                                            onClick={() => {
+                                                              if (confirm('Are you sure you want to delete this comment?')) {
+                                                                deleteComment.mutate(reply.id);
+                                                              }
+                                                            }}
+                                                            disabled={deleteComment.isPending}
+                                                            className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
+                                                          >
+                                                            Delete
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {/* Reply Form */}
+                                            {replyingToComment === thread.parentComment.id && (
+                                              <div className={`p-3 border-t ${theme.border} bg-everforest-bg1/50`}>
+                                                <textarea
+                                                  value={replyBody}
+                                                  onChange={(e) => setReplyBody(e.target.value)}
+                                                  onKeyDown={async (e) => {
+                                                    if (e.key === 'Enter' && e.ctrlKey && replyBody.trim() && !replyToComment.isPending) {
+                                                      e.preventDefault();
+                                                      if (replyingToComment) {
+                                                        await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
+                                                        setReplyingToComment(null);
+                                                        setReplyBody('');
+                                                      }
+                                                    }
+                                                  }}
+                                                  placeholder="Write a reply..."
+                                                  className={`w-full p-2 border ${theme.border} rounded text-xs ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
+                                                  rows={3}
+                                                  autoFocus
+                                                />
+                                                <div className="mt-2 flex gap-2">
+                                                  <button
+                                                    onClick={async () => {
+                                                      if (replyBody.trim()) {
+                                                        await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
+                                                        setReplyingToComment(null);
+                                                        setReplyBody('');
+                                                      }
+                                                    }}
+                                                    disabled={!replyBody.trim() || replyToComment.isPending}
+                                                    className={`px-3 py-1 rounded text-xs font-medium ${
+                                                      replyBody.trim() && !replyToComment.isPending
+                                                        ? 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
+                                                        : 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
+                                                    }`}
+                                                  >
+                                                    {replyToComment.isPending ? 'Posting...' : 'Reply'}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      setReplyingToComment(null);
+                                                      setReplyBody('');
+                                                    }}
+                                                    disabled={replyToComment.isPending}
+                                                    className={`px-3 py-1 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Thread Actions Footer */}
+                                            {replyingToComment !== thread.parentComment.id && (
+                                              <div className={`p-2 border-t ${theme.border} bg-everforest-bg1/30 flex gap-2`}>
+                                                <button
+                                                  onClick={() => {
+                                                    setReplyingToComment(thread.parentComment.id);
+                                                    setReplyBody('');
+                                                  }}
+                                                  className={`flex-1 px-4 py-2 rounded border-2 border-everforest-blue/40 text-sm font-medium ${theme.textPrimary} hover:bg-everforest-bg2 hover:border-everforest-blue transition-colors`}
+                                                >
+                                                  Reply
+                                                </button>
+                                                <button
+                                                  onClick={() => {
+                                                    if (thread.resolved) {
+                                                      unresolveThread.mutate(thread.id);
+                                                    } else {
+                                                      resolveThread.mutate(thread.id);
+                                                    }
+                                                  }}
+                                                  disabled={resolveThread.isPending || unresolveThread.isPending}
+                                                  className={`flex-1 px-4 py-2 rounded border-2 text-sm font-medium transition-colors ${
+                                                    thread.resolved
+                                                      ? 'border-everforest-yellow/40 text-everforest-yellow hover:bg-everforest-bg2 hover:border-everforest-yellow'
+                                                      : 'border-everforest-green/40 text-everforest-green hover:bg-everforest-bg2 hover:border-everforest-green'
+                                                  } ${resolveThread.isPending || unresolveThread.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                >
+                                                  {resolveThread.isPending || unresolveThread.isPending
+                                                    ? '...'
+                                                    : thread.resolved
+                                                    ? 'Unresolve'
+                                                    : 'Resolve'}
+                                                </button>
+                                              </div>
+                                            )}
+                                            </>
+                                            )}
                                           </div>
                                         );
                                         })}
-                                        {replyingToComment && lineComments.some(c => c.id === replyingToComment) && (
-                                          <div className={`mt-2 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
-                                            <textarea
-                                              value={replyBody}
-                                              onChange={(e) => setReplyBody(e.target.value)}
-                                              placeholder="Write a reply..."
-                                              className={`w-full p-2 border ${theme.border} rounded text-xs ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
-                                              rows={3}
-                                              autoFocus
-                                            />
-                                            <div className="mt-2 flex gap-2">
-                                              <button
-                                                onClick={async () => {
-                                                  if (replyBody.trim()) {
-                                                    await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
-                                                    setReplyingToComment(null);
-                                                    setReplyBody('');
-                                                  }
-                                                }}
-                                                disabled={!replyBody.trim() || replyToComment.isPending}
-                                                className={`px-3 py-1 rounded text-xs font-medium ${
-                                                  replyBody.trim() && !replyToComment.isPending
-                                                    ? 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
-                                                    : 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
-                                                }`}
-                                              >
-                                                {replyToComment.isPending ? 'Posting...' : 'Reply'}
-                                              </button>
-                                              <button
-                                                onClick={() => {
-                                                  setReplyingToComment(null);
-                                                  setReplyBody('');
-                                                }}
-                                                disabled={replyToComment.isPending}
-                                                className={`px-3 py-1 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
-                                              >
-                                                Cancel
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
                                       </div>
                                     )}
                                     {commentingLine?.file === file.filename &&
@@ -1501,6 +1646,12 @@ export function StackDetailPage() {
                                         <textarea
                                           value={commentBody}
                                           onChange={(e) => setCommentBody(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.ctrlKey && commentBody.trim() && !createComment.isPending) {
+                                              e.preventDefault();
+                                              handleSubmitComment();
+                                            }
+                                          }}
                                           placeholder="Add a comment..."
                                           className={`w-full p-2 border ${theme.border} rounded text-sm ${theme.textPrimary} ${theme.bgSecondary} focus:outline-none focus:ring-2 focus:ring-everforest-green font-mono`}
                                           rows={3}
@@ -1559,11 +1710,11 @@ export function StackDetailPage() {
                                   line.lineNum >= Math.min(selectingLines.startLine, selectingLines.currentLine) &&
                                   line.lineNum <= Math.max(selectingLines.startLine, selectingLines.currentLine);
 
-                                // Find existing comments for this line
-                                // For the right side, only show comments with side === 'RIGHT'
-                                const lineComments = inlineComments.filter(
-                                  (c) => c.path === file.filename && c.line === line.lineNum && c.side === 'RIGHT'
-                                );
+                                // Find existing threads for this line
+                                // For the right side, only show threads with side === 'RIGHT'
+                                const lineThreads = threads?.filter(
+                                  (t) => t.path === file.filename && t.line === line.lineNum && t.parentComment.side === 'RIGHT'
+                                ) || [];
 
                                 return (
                                   <div key={index}>
@@ -1596,119 +1747,220 @@ export function StackDetailPage() {
                                         )}
                                       </span>
                                     </div>
-                                    {lineComments.length > 0 && (
-                                      <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-2`}>
-                                        {lineComments.map((comment) => {
-                                          // Find thread for this comment if it's a parent comment
-                                          const thread = threads?.find(t => t.parentComment.id === comment.id);
-                                          const isThreadParent = !!thread;
-
+                                    {lineThreads.length > 0 && (
+                                      <div className={`p-3 border-t ${theme.border} ${theme.bgPrimary} space-y-3`}>
+                                        {lineThreads.map((thread) => {
+                                          const isCollapsed = collapsedThreads.has(thread.id);
                                           return (
-                                          <div key={comment.id} className={`border-2 ${thread && thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg p-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
-                                            <div className="flex items-start gap-2">
-                                              <img
-                                                src={comment.user.avatar_url}
-                                                alt={comment.user.login}
-                                                className="h-5 w-5 rounded-full flex-shrink-0"
-                                              />
-                                              <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className={`text-xs font-medium ${theme.textPrimary}`}>
-                                                    {comment.user.login}
-                                                  </span>
+                                          <div key={thread.id} className={`border-2 ${thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg ${thread.resolved ? 'opacity-75' : ''}`}>
+                                            {/* Thread Header */}
+                                            <div
+                                              className={`p-2 border-b ${theme.border} bg-everforest-bg1/30 flex items-center justify-between cursor-pointer hover:bg-everforest-bg2 transition-colors`}
+                                              onClick={() => toggleThreadCollapse(thread.id)}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <span className={`text-xs ${theme.textMuted}`}>
+                                                  {isCollapsed ? '▶' : '▼'}
+                                                </span>
+                                                <span className={`text-xs font-medium ${theme.textPrimary}`}>
+                                                  {thread.parentComment.user.login}
+                                                </span>
+                                                <ThreadStatusBadge resolved={thread.resolved} />
+                                                {thread.replies.length > 0 && (
                                                   <span className={`text-xs ${theme.textMuted}`}>
-                                                    {new Date(comment.created_at).toLocaleString()}
+                                                    ({thread.replies.length + 1} comment{thread.replies.length + 1 !== 1 ? 's' : ''})
                                                   </span>
-                                                  {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
-                                                </div>
-                                                <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
-                                                  {comment.body}
-                                                </div>
-                                                <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                                  <a
-                                                    href={comment.html_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className={`text-xs ${theme.textLink}`}
-                                                  >
-                                                    View on GitHub →
-                                                  </a>
-                                                  <button
-                                                    onClick={() => {
-                                                      setReplyingToComment(comment.id);
-                                                      setReplyBody('');
-                                                    }}
-                                                    className={`text-xs ${theme.textMuted} hover:text-everforest-green`}
-                                                  >
-                                                    Reply
-                                                  </button>
-                                                  <button
-                                                    onClick={() => {
-                                                      if (confirm('Are you sure you want to delete this comment?')) {
-                                                        deleteComment.mutate(comment.id);
-                                                      }
-                                                    }}
-                                                    disabled={deleteComment.isPending}
-                                                    className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
-                                                  >
-                                                    Delete
-                                                  </button>
-                                                  {isThreadParent && (
-                                                    <ThreadResolutionButton
-                                                      threadId={thread.id}
-                                                      resolved={thread.resolved}
-                                                      onResolve={(threadId) => resolveThread.mutate(threadId)}
-                                                      onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
-                                                      isLoading={resolveThread.isPending || unresolveThread.isPending}
-                                                    />
-                                                  )}
+                                                )}
+                                              </div>
+                                              <span className={`text-xs ${theme.textMuted}`}>
+                                                {new Date(thread.parentComment.created_at).toLocaleString()}
+                                              </span>
+                                            </div>
+
+                                            {/* Thread Content */}
+                                            {!isCollapsed && (
+                                            <>
+                                            {/* Parent Comment */}
+                                            <div className="p-3">
+                                              <div className="flex items-start gap-2">
+                                                <img
+                                                  src={thread.parentComment.user.avatar_url}
+                                                  alt={thread.parentComment.user.login}
+                                                  className="h-5 w-5 rounded-full flex-shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                  <div className={`text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
+                                                    {thread.parentComment.body}
+                                                  </div>
+                                                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                                    <a
+                                                      href={thread.parentComment.html_url}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className={`text-xs ${theme.textLink}`}
+                                                    >
+                                                      View on GitHub →
+                                                    </a>
+                                                    <button
+                                                      onClick={() => {
+                                                        if (confirm('Are you sure you want to delete this comment?')) {
+                                                          deleteComment.mutate(thread.parentComment.id);
+                                                        }
+                                                      }}
+                                                      disabled={deleteComment.isPending}
+                                                      className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
+                                                    >
+                                                      Delete
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               </div>
                                             </div>
+
+                                            {/* Replies */}
+                                            {thread.replies.length > 0 && (
+                                              <div className={`border-t ${theme.border} bg-everforest-bg1/50`}>
+                                                {thread.replies.map((reply) => (
+                                                  <div key={reply.id} className={`p-3 border-b last:border-b-0 ${theme.border}`}>
+                                                    <div className="flex items-start gap-2">
+                                                      <img
+                                                        src={reply.user.avatar_url}
+                                                        alt={reply.user.login}
+                                                        className="h-5 w-5 rounded-full flex-shrink-0"
+                                                      />
+                                                      <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                          <span className={`text-xs font-medium ${theme.textPrimary}`}>
+                                                            {reply.user.login}
+                                                          </span>
+                                                          <span className={`text-xs ${theme.textMuted}`}>
+                                                            {new Date(reply.created_at).toLocaleString()}
+                                                          </span>
+                                                        </div>
+                                                        <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
+                                                          {reply.body}
+                                                        </div>
+                                                        <div className="mt-1 flex items-center gap-2">
+                                                          <a
+                                                            href={reply.html_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className={`text-xs ${theme.textLink}`}
+                                                          >
+                                                            View on GitHub →
+                                                          </a>
+                                                          <button
+                                                            onClick={() => {
+                                                              if (confirm('Are you sure you want to delete this comment?')) {
+                                                                deleteComment.mutate(reply.id);
+                                                              }
+                                                            }}
+                                                            disabled={deleteComment.isPending}
+                                                            className={`text-xs ${theme.textMuted} hover:text-everforest-red disabled:opacity-50`}
+                                                          >
+                                                            Delete
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {/* Reply Form */}
+                                            {replyingToComment === thread.parentComment.id && (
+                                              <div className={`p-3 border-t ${theme.border} bg-everforest-bg1/50`}>
+                                                <textarea
+                                                  value={replyBody}
+                                                  onChange={(e) => setReplyBody(e.target.value)}
+                                                  onKeyDown={async (e) => {
+                                                    if (e.key === 'Enter' && e.ctrlKey && replyBody.trim() && !replyToComment.isPending) {
+                                                      e.preventDefault();
+                                                      if (replyingToComment) {
+                                                        await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
+                                                        setReplyingToComment(null);
+                                                        setReplyBody('');
+                                                      }
+                                                    }
+                                                  }}
+                                                  placeholder="Write a reply..."
+                                                  className={`w-full p-2 border ${theme.border} rounded text-xs ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
+                                                  rows={3}
+                                                  autoFocus
+                                                />
+                                                <div className="mt-2 flex gap-2">
+                                                  <button
+                                                    onClick={async () => {
+                                                      if (replyBody.trim()) {
+                                                        await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
+                                                        setReplyingToComment(null);
+                                                        setReplyBody('');
+                                                      }
+                                                    }}
+                                                    disabled={!replyBody.trim() || replyToComment.isPending}
+                                                    className={`px-3 py-1 rounded text-xs font-medium ${
+                                                      replyBody.trim() && !replyToComment.isPending
+                                                        ? 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
+                                                        : 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
+                                                    }`}
+                                                  >
+                                                    {replyToComment.isPending ? 'Posting...' : 'Reply'}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      setReplyingToComment(null);
+                                                      setReplyBody('');
+                                                    }}
+                                                    disabled={replyToComment.isPending}
+                                                    className={`px-3 py-1 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Thread Actions Footer */}
+                                            {replyingToComment !== thread.parentComment.id && (
+                                              <div className={`p-2 border-t ${theme.border} bg-everforest-bg1/30 flex gap-2`}>
+                                                <button
+                                                  onClick={() => {
+                                                    setReplyingToComment(thread.parentComment.id);
+                                                    setReplyBody('');
+                                                  }}
+                                                  className={`flex-1 px-4 py-2 rounded border-2 border-everforest-blue/40 text-sm font-medium ${theme.textPrimary} hover:bg-everforest-bg2 hover:border-everforest-blue transition-colors`}
+                                                >
+                                                  Reply
+                                                </button>
+                                                <button
+                                                  onClick={() => {
+                                                    if (thread.resolved) {
+                                                      unresolveThread.mutate(thread.id);
+                                                    } else {
+                                                      resolveThread.mutate(thread.id);
+                                                    }
+                                                  }}
+                                                  disabled={resolveThread.isPending || unresolveThread.isPending}
+                                                  className={`flex-1 px-4 py-2 rounded border-2 text-sm font-medium transition-colors ${
+                                                    thread.resolved
+                                                      ? 'border-everforest-yellow/40 text-everforest-yellow hover:bg-everforest-bg2 hover:border-everforest-yellow'
+                                                      : 'border-everforest-green/40 text-everforest-green hover:bg-everforest-bg2 hover:border-everforest-green'
+                                                  } ${resolveThread.isPending || unresolveThread.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                >
+                                                  {resolveThread.isPending || unresolveThread.isPending
+                                                    ? '...'
+                                                    : thread.resolved
+                                                    ? 'Unresolve'
+                                                    : 'Resolve'}
+                                                </button>
+                                              </div>
+                                            )}
+                                            </>
+                                            )}
                                           </div>
                                         );
                                         })}
-                                        {replyingToComment && lineComments.some(c => c.id === replyingToComment) && (
-                                          <div className={`mt-2 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
-                                            <textarea
-                                              value={replyBody}
-                                              onChange={(e) => setReplyBody(e.target.value)}
-                                              placeholder="Write a reply..."
-                                              className={`w-full p-2 border ${theme.border} rounded text-xs ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
-                                              rows={3}
-                                              autoFocus
-                                            />
-                                            <div className="mt-2 flex gap-2">
-                                              <button
-                                                onClick={async () => {
-                                                  if (replyBody.trim()) {
-                                                    await replyToComment.mutateAsync({ commentId: replyingToComment, body: replyBody });
-                                                    setReplyingToComment(null);
-                                                    setReplyBody('');
-                                                  }
-                                                }}
-                                                disabled={!replyBody.trim() || replyToComment.isPending}
-                                                className={`px-3 py-1 rounded text-xs font-medium ${
-                                                  replyBody.trim() && !replyToComment.isPending
-                                                    ? 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
-                                                    : 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
-                                                }`}
-                                              >
-                                                {replyToComment.isPending ? 'Posting...' : 'Reply'}
-                                              </button>
-                                              <button
-                                                onClick={() => {
-                                                  setReplyingToComment(null);
-                                                  setReplyBody('');
-                                                }}
-                                                disabled={replyToComment.isPending}
-                                                className={`px-3 py-1 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
-                                              >
-                                                Cancel
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
                                       </div>
                                     )}
                                     {commentingLine?.file === file.filename &&
@@ -1731,6 +1983,12 @@ export function StackDetailPage() {
                                         <textarea
                                           value={commentBody}
                                           onChange={(e) => setCommentBody(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.ctrlKey && commentBody.trim() && !createComment.isPending) {
+                                              e.preventDefault();
+                                              handleSubmitComment();
+                                            }
+                                          }}
                                           placeholder="Add a comment..."
                                           className={`w-full p-2 border ${theme.border} rounded text-sm ${theme.textPrimary} ${theme.bgSecondary} focus:outline-none focus:ring-2 focus:ring-everforest-green font-mono`}
                                           rows={3}
