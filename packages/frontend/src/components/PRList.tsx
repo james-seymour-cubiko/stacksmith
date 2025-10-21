@@ -7,14 +7,14 @@ import { computeReviewStatus } from '../lib/reviewStatus';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { ThreadCountBadge } from './ThreadCountBadge';
 
-// Copy button component with visual feedback
-function CopyButton({ text, label }: { text: string; label: string }) {
+// Branch copy button - shows truncated branch name, copies on click
+function BranchCopyButton({ branchName }: { branchName: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(branchName);
       setCopied(true);
       setTimeout(() => setCopied(false), 500);
     } catch (err) {
@@ -22,17 +22,20 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     }
   };
 
+  // Truncate branch name if too long
+  const truncatedName = branchName.length > 18 ? branchName.substring(0, 18) + '...' : branchName;
+
   return (
     <button
       onClick={handleCopy}
-      className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+      className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
         copied
           ? 'bg-everforest-green/20 text-everforest-green'
           : 'bg-everforest-bg3/50 text-everforest-grey1 hover:bg-everforest-bg3 hover:text-everforest-fg'
       }`}
-      title={copied ? 'Copied!' : `Copy ${label}`}
+      title={copied ? `Copied: ${branchName}` : `Click to copy branch: ${branchName}`}
     >
-      {copied ? '✓' : '📋'}
+      {copied ? '✓ Copied' : truncatedName}
     </button>
   );
 }
@@ -425,10 +428,10 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               <ReviewStatusBadge reviewStatus={reviewStatus} isLoading={reviewsLoading} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
+              <BranchCopyButton branchName={pr.head.ref} />
             </div>
             {/* Title on second line */}
             <div className={`font-medium ${theme.textPrimary} break-words flex items-center gap-1.5`}>
-              <CopyButton text={pr.head.ref} label="branch name" />
               <a
                 href={pr.html_url}
                 target="_blank"

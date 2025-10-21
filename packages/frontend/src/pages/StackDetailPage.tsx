@@ -20,14 +20,15 @@ import { getUnresolvedCountByFile, findThreadById } from '../lib/threadUtils';
 import DiffMatchPatch from 'diff-match-patch';
 import type { GithubDiff, GithubPR, GithubCheckRun, CommentThread } from '@review-app/shared';
 
-// Copy button component with visual feedback
-function CopyButton({ text, label }: { text: string; label: string }) {
+// Filename copy button - shows filename with hover icon
+function FilenameCopyButton({ filename }: { filename: string }) {
   const [copied, setCopied] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(filename);
       setCopied(true);
       setTimeout(() => setCopied(false), 500);
     } catch (err) {
@@ -38,14 +39,17 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <button
       onClick={handleCopy}
-      className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-        copied
-          ? 'bg-everforest-green/20 text-everforest-green'
-          : 'bg-everforest-bg4/50 text-everforest-grey1 hover:bg-everforest-bg4 hover:text-everforest-fg'
-      }`}
-      title={copied ? 'Copied!' : `Copy ${label}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`font-mono text-sm ${theme.textPrimary} hover:text-everforest-blue transition-colors flex items-center gap-1.5`}
+      title={copied ? 'Copied!' : 'Click to copy filename'}
     >
-      {copied ? '✓' : '📋'}
+      {filename}
+      {(isHovered || copied) && (
+        <span className={`text-xs ${copied ? 'text-everforest-green' : 'text-everforest-grey1'}`}>
+          {copied ? '✓' : '📋'}
+        </span>
+      )}
     </button>
   );
 }
@@ -1366,8 +1370,7 @@ export function StackDetailPage() {
                             >
                               {file.status}
                             </span>
-                            <span className={`font-mono text-sm ${theme.textPrimary}`}>{file.filename}</span>
-                            <CopyButton text={file.filename} label="Filename" />
+                            <FilenameCopyButton filename={file.filename} />
                             {file.previous_filename && (
                               <span className={`text-xs ${theme.textSecondary}`}>
                                 (renamed from {file.previous_filename})
