@@ -305,23 +305,75 @@ export class GithubService {
       pull_number: prNumber,
     });
 
-    // Then get check runs for that SHA
-    const { data } = await this.octokit!.checks.listForRef({
+    // Get check runs for that SHA
+    const { data: checkRunsData } = await this.octokit!.checks.listForRef({
       owner: this.owner,
       repo: this.repo,
       ref: pr.head.sha,
     });
 
-    return data.check_runs.filter((check) => check.name !== "Graphite / mergeability_check").map((check) => ({
-      id: check.id,
-      name: check.name,
-      status: check.status as 'queued' | 'in_progress' | 'completed',
-      conclusion: check.conclusion as 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null,
-      started_at: check.started_at,
-      completed_at: check.completed_at,
-      html_url: check.html_url,
-      details_url: check.details_url,
-    }));
+    // Get workflow runs for that SHA to map workflow names
+    const { data: workflowRunsData } = await this.octokit!.actions.listWorkflowRunsForRepo({
+      owner: this.owner,
+      repo: this.repo,
+      head_sha: pr.head.sha,
+      per_page: 100,
+    });
+
+    // Create a map of workflow run ID to workflow name
+    const workflowRunMap = new Map<number, string>();
+    for (const workflowRun of workflowRunsData.workflow_runs) {
+      workflowRunMap.set(workflowRun.id, workflowRun.name);
+    }
+
+    // For each check run, try to find its workflow run and get the workflow name
+    const checkRunsWithWorkflowNames = await Promise.all(
+      checkRunsData.check_runs
+        .filter((check) => check.name !== "Graphite / mergeability_check")
+        .map(async (check) => {
+          let workflowName = '';
+
+          // Try to find the workflow run for this check run
+          if (check.check_suite) {
+            // Find workflow runs that match this check suite
+            for (const workflowRun of workflowRunsData.workflow_runs) {
+              try {
+                const { data: jobs } = await this.octokit!.actions.listJobsForWorkflowRun({
+                  owner: this.owner,
+                  repo: this.repo,
+                  run_id: workflowRun.id,
+                });
+
+                // Check if any job matches this check run
+                const matchingJob = jobs.jobs.find((job) => job.id === check.id);
+                if (matchingJob) {
+                  workflowName = workflowRun.name;
+                  break;
+                }
+              } catch {
+                // Continue if we can't fetch jobs for this workflow run
+                continue;
+              }
+            }
+          }
+
+          // If we found a workflow name, prefix the check name with it
+          const displayName = workflowName ? `${workflowName} / ${check.name}` : check.name;
+
+          return {
+            id: check.id,
+            name: displayName,
+            status: check.status as 'queued' | 'in_progress' | 'completed',
+            conclusion: check.conclusion as 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | null,
+            started_at: check.started_at,
+            completed_at: check.completed_at,
+            html_url: check.html_url,
+            details_url: check.details_url,
+          };
+        })
+    );
+
+    return checkRunsWithWorkflowNames;
   }
 
   async rerunCheckRun(checkRunId: number): Promise<void> {

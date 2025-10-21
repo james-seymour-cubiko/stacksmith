@@ -33,7 +33,12 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
           </div>
         ) : !checkRuns || checkRuns.length === 0 ? (
           <p className={`text-xs ${theme.textMuted} text-center py-4`}>No CI checks</p>
-        ) : checkRuns.filter((check) => check.conclusion !== 'success').length === 0 ? (
+        ) : checkRuns.every((check) =>
+            check.conclusion === 'success' ||
+            check.conclusion === 'skipped' ||
+            check.conclusion === 'cancelled' ||
+            check.conclusion === 'neutral'
+          ) ? (
           <div className={`text-center py-4 px-2 rounded ${theme.successBox}`}>
             <p className={`text-xs ${theme.textSuccess} font-medium`}>
               ✓ All checks passed
@@ -41,33 +46,49 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
           </div>
         ) : (
           <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-            {checkRuns.filter((check) => check.conclusion !== 'success').map((check) => {
-              const isSuccess = check.conclusion === 'success';
-              const isFailure = check.conclusion === 'failure';
-              const isInProgress = check.status === 'in_progress';
-              const isQueued = check.status === 'queued';
-
+            {checkRuns.filter((check) =>
+              // Show blocking failures and in-progress checks
+              check.conclusion === 'failure' ||
+              check.conclusion === 'timed_out' ||
+              check.conclusion === 'action_required' ||
+              check.status === 'in_progress' ||
+              check.status === 'queued'
+            ).map((check) => {
               let statusColor = theme.textMuted;
               let statusIcon = '○';
 
-              if (isSuccess) {
-                statusColor = theme.textSuccess;
-                statusIcon = '✓';
-              } else if (isFailure) {
+              // Blocking failures
+              if (check.conclusion === 'failure') {
                 statusColor = theme.textError;
                 statusIcon = '✗';
-              } else if (isInProgress) {
+              } else if (check.conclusion === 'timed_out') {
+                statusColor = theme.textError;
+                statusIcon = '⏱';
+              } else if (check.conclusion === 'action_required') {
+                statusColor = theme.textError;
+                statusIcon = '⚠';
+              }
+              // In-progress states
+              else if (check.status === 'in_progress') {
                 statusColor = theme.textWarning;
                 statusIcon = '⟳';
-              } else if (isQueued) {
+              } else if (check.status === 'queued') {
                 statusColor = theme.textMuted;
                 statusIcon = '◷';
+              }
+              // Non-blocking states (shouldn't show up due to filter, but keep for safety)
+              else if (check.conclusion === 'success') {
+                statusColor = theme.textSuccess;
+                statusIcon = '✓';
               } else if (check.conclusion === 'cancelled') {
                 statusColor = theme.textMuted;
                 statusIcon = '⊘';
               } else if (check.conclusion === 'skipped') {
                 statusColor = theme.textMuted;
                 statusIcon = '⊝';
+              } else if (check.conclusion === 'neutral') {
+                statusColor = theme.textMuted;
+                statusIcon = '○';
               }
 
               return (

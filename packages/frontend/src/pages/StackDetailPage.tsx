@@ -504,6 +504,7 @@ export function StackDetailPage() {
     };
 
     // Determine CI emoji based on check runs from cache
+    // Matches GitHub's actual mergeability logic
     const getCIEmoji = (prNumber: number) => {
       const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']);
 
@@ -515,15 +516,31 @@ export function StackDetailPage() {
         return '➖'; // No CI
       }
 
-      const failedChecks = checkRuns.filter((c) => c.conclusion === 'failure').length;
-      const inProgressChecks = checkRuns.filter((c) => c.status === 'in_progress').length;
-      const queuedChecks = checkRuns.filter((c) => c.status === 'queued').length;
-      const passedChecks = checkRuns.filter((c) => c.conclusion === 'success').length;
+      // Check for blocking states (will prevent merge)
+      const blockingChecks = checkRuns.filter((c) =>
+        c.conclusion === 'failure' ||
+        c.conclusion === 'timed_out' ||
+        c.conclusion === 'action_required'
+      ).length;
 
-      if (failedChecks > 0) return '💥'; // CI failed
-      if (inProgressChecks > 0 || queuedChecks > 0) return '⏳'; // CI running
-      if (passedChecks === checkRuns.length && passedChecks > 0) return '✅'; // CI passed
-      return '❓'; // Unknown
+      // Check for in-progress states
+      const inProgressChecks = checkRuns.filter((c) =>
+        c.status === 'in_progress' ||
+        c.status === 'queued'
+      ).length;
+
+      // Success, skipped, cancelled, and neutral are non-blocking
+      const nonBlockingChecks = checkRuns.filter((c) =>
+        c.conclusion === 'success' ||
+        c.conclusion === 'skipped' ||
+        c.conclusion === 'cancelled' ||
+        c.conclusion === 'neutral'
+      ).length;
+
+      if (blockingChecks > 0) return '💥'; // CI failed - will block merge
+      if (inProgressChecks > 0) return '⏳'; // CI running
+      if (nonBlockingChecks === checkRuns.length && checkRuns.length > 0) return '✅'; // All checks passed or non-blocking
+      return '❓'; // Unknown state
     };
 
     // Format as single HTML blockquote with all PRs
