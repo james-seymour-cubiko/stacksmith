@@ -257,8 +257,30 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
   } else {
     // Check all PRs that need to be merged for blockers
     for (const checkPr of prsToMerge) {
+      // Get full PR data from cache (includes mergeable status)
+      const fullPR = queryClient.getQueryData<any>(['prs', owner, repo, checkPr.number]);
+      const prData = fullPR || checkPr;
+
+      // If we don't have full PR data, disable merge as a safety measure
+      if (!fullPR && prData.mergeable === undefined) {
+        mergeButtonText = '⏳ Loading...';
+        mergeButtonTooltip = `Waiting for PR #${checkPr.number} data to load`;
+        mergeButtonDisabled = true;
+        canMerge = false;
+        break;
+      }
+
+      // Check merge conflicts FIRST - this is the highest priority blocker
+      if (prData.mergeable === false || prData.mergeable_state === 'dirty') {
+        mergeButtonText = '⚠ Conflicts';
+        mergeButtonTooltip = `PR #${checkPr.number} has merge conflicts that must be resolved before merging`;
+        mergeButtonDisabled = true;
+        canMerge = false;
+        break;
+      }
+
       // Check if closed
-      if (checkPr.state === 'closed' && !checkPr.merged_at) {
+      if (prData.state === 'closed' && !prData.merged_at) {
         mergeButtonText = 'Closed';
         mergeButtonTooltip = `PR #${checkPr.number} is closed and must be reopened before merging`;
         mergeButtonDisabled = true;
@@ -267,18 +289,9 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
       }
 
       // Check draft status
-      if (checkPr.draft) {
+      if (prData.draft) {
         mergeButtonText = '⚠ Draft';
         mergeButtonTooltip = `PR #${checkPr.number} is a draft and must be marked as ready for review before merging`;
-        mergeButtonDisabled = true;
-        canMerge = false;
-        break;
-      }
-
-      // Check merge conflicts
-      if (checkPr.mergeable === false) {
-        mergeButtonText = '⚠ Conflicts';
-        mergeButtonTooltip = `PR #${checkPr.number} has merge conflicts that must be resolved before merging`;
         mergeButtonDisabled = true;
         canMerge = false;
         break;

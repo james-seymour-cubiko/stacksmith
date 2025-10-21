@@ -12,7 +12,8 @@ interface ThreadListProps {
 }
 
 export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isLoading = false }: ThreadListProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [unresolvedExpanded, setUnresolvedExpanded] = useState(true);
+  const [resolvedExpanded, setResolvedExpanded] = useState(false); // Collapsed by default
 
   // Sort threads: unresolved first, then resolved
   const sortedThreads = [...threads].sort((a, b) => {
@@ -39,23 +40,14 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
       {/* Header */}
       <div className={`px-6 py-4 border-b ${theme.border} flex items-center justify-between`}>
         <div className="flex items-center gap-3">
-          {threads.length > 0 && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={`text-xs ${theme.textSecondary} hover:text-everforest-fg transition-colors`}
-            >
-              {isExpanded ? '▼' : '▶'}
-            </button>
-          )}
           <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
-            Comment Threads ({resolvedCount} / {totalCount} resolved)
+            Threads ({resolvedCount} / {totalCount} resolved)
           </h2>
         </div>
       </div>
 
       {/* Thread list */}
-      {isExpanded && (
-        <div className="px-6 py-4">
+      <div className="px-6 py-4">
           {threads.length === 0 ? (
             <p className={theme.textSecondary}>No comment threads yet.</p>
           ) : (
@@ -63,10 +55,17 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
               {/* Unresolved threads section */}
               {unresolvedCount > 0 && (
                 <div className="mb-3">
-                  <div className={`text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2`}>
+                  <button
+                    onClick={() => setUnresolvedExpanded(!unresolvedExpanded)}
+                    className={`w-full text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2 hover:text-everforest-fg transition-colors`}
+                  >
+                    <span className={`text-xs ${theme.textSecondary}`}>
+                      {unresolvedExpanded ? '▼' : '▶'}
+                    </span>
                     <ThreadStatusBadge resolved={false} />
                     <span>({unresolvedCount})</span>
-                  </div>
+                  </button>
+                  {unresolvedExpanded && (
                   <div className={`border ${theme.border} rounded overflow-hidden`}>
                     <table className="w-full">
                       <tbody>
@@ -91,7 +90,7 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                             <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
                               {getFilename(thread.path)}
                             </td>
-                            <td className="py-2 px-3 w-8">
+                            <td className="py-2 px-3 w-14">
                               <img
                                 src={thread.parentComment.user.avatar_url}
                                 alt={thread.parentComment.user.login}
@@ -104,16 +103,24 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               )}
 
               {/* Resolved threads section */}
               {resolvedCount > 0 && (
                 <div>
-                  <div className={`text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2`}>
+                  <button
+                    onClick={() => setResolvedExpanded(!resolvedExpanded)}
+                    className={`w-full text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2 hover:text-everforest-fg transition-colors`}
+                  >
+                    <span className={`text-xs ${theme.textSecondary}`}>
+                      {resolvedExpanded ? '▼' : '▶'}
+                    </span>
                     <ThreadStatusBadge resolved={true} />
                     <span>({resolvedCount})</span>
-                  </div>
+                  </button>
+                  {resolvedExpanded && (
                   <div className={`border ${theme.border} rounded overflow-hidden`}>
                     <table className="w-full">
                       <tbody>
@@ -138,7 +145,7 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                             <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
                               {getFilename(thread.path)}
                             </td>
-                            <td className="py-2 px-3 w-8">
+                            <td className="py-2 px-3 w-14">
                               <img
                                 src={thread.parentComment.user.avatar_url}
                                 alt={thread.parentComment.user.login}
@@ -151,12 +158,12 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               )}
             </>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
