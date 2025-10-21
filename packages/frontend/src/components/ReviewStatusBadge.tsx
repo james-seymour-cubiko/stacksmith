@@ -3,10 +3,22 @@ import { ReviewStatusInfo } from '@review-app/shared';
 import { getReviewStatusShortLabel } from '../lib/reviewStatus';
 
 interface ReviewStatusBadgeProps {
-  reviewStatus: ReviewStatusInfo;
+  reviewStatus?: ReviewStatusInfo;
 }
 
 export function ReviewStatusBadge({ reviewStatus }: ReviewStatusBadgeProps) {
+  // If no review status provided, show "Needs Reviewers"
+  if (!reviewStatus) {
+    return (
+      <span
+        className="inline-flex items-center px-2 py-0.5 text-xs font-medium border rounded bg-everforest-yellow/20 text-everforest-yellow border-everforest-yellow/30"
+        title="No reviewers have been requested for this PR"
+      >
+        ⚠ Needs Reviewers
+      </span>
+    );
+  }
+
   const { status, approvalCount, changesRequestedCount, commentedCount, totalReviews } = reviewStatus;
 
   // Determine badge color based on status

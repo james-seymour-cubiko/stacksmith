@@ -360,7 +360,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               </span>
               <MergeConflictBadge pr={pr} owner={owner} repo={repo} />
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
-              {reviewStatus && <ReviewStatusBadge reviewStatus={reviewStatus} />}
+              <ReviewStatusBadge reviewStatus={reviewStatus} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
               <span className={`font-medium ${theme.textPrimary} truncate`}>
                 #{pr.number} {pr.title}
