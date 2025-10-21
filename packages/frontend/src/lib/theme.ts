@@ -26,8 +26,8 @@ export const theme = {
 
   // Text colors
   textPrimary: 'text-everforest-fg',
-  textSecondary: 'text-everforest-grey1',
-  textMuted: 'text-everforest-grey0',
+  textSecondary: 'text-everforest-grey2',
+  textMuted: 'text-everforest-grey1',
   textLink: 'text-everforest-blue hover:text-everforest-aqua',
   textSuccess: 'text-everforest-green',
   textError: 'text-everforest-red',
