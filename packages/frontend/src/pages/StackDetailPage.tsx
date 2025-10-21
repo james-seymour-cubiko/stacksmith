@@ -19,6 +19,36 @@ import { getUnresolvedCountByFile, findThreadById } from '../lib/threadUtils';
 import DiffMatchPatch from 'diff-match-patch';
 import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
 
+// Copy button component with visual feedback
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 500);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+        copied
+          ? 'bg-everforest-green/20 text-everforest-green'
+          : 'bg-everforest-bg4/50 text-everforest-grey1 hover:bg-everforest-bg4 hover:text-everforest-fg'
+      }`}
+      title={copied ? 'Copied!' : `Copy ${label}`}
+    >
+      {copied ? '✓' : '📋'}
+    </button>
+  );
+}
+
 interface FileTreeNode {
   name: string;
   path: string;
@@ -1255,6 +1285,7 @@ export function StackDetailPage() {
                               {file.status}
                             </span>
                             <span className={`font-mono text-sm ${theme.textPrimary}`}>{file.filename}</span>
+                            <CopyButton text={file.filename} label="Filename" />
                             {file.previous_filename && (
                               <span className={`text-xs ${theme.textSecondary}`}>
                                 (renamed from {file.previous_filename})

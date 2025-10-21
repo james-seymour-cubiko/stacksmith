@@ -1,10 +1,41 @@
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { theme } from '../lib/theme';
 import type { GithubCheckRun, GithubReview, ReviewStatusInfo, CommentThread } from '../../../shared/src/types';
 import { useBulkPRReviews, useBulkPRThreads } from '../hooks/usePRs';
 import { computeReviewStatus } from '../lib/reviewStatus';
 import { ReviewStatusBadge } from './ReviewStatusBadge';
 import { ThreadCountBadge } from './ThreadCountBadge';
+
+// Copy button component with visual feedback
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 500);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+        copied
+          ? 'bg-everforest-green/20 text-everforest-green'
+          : 'bg-everforest-bg3/50 text-everforest-grey1 hover:bg-everforest-bg3 hover:text-everforest-fg'
+      }`}
+      title={copied ? 'Copied!' : `Copy ${label}`}
+    >
+      {copied ? '✓' : '📋'}
+    </button>
+  );
+}
 
 interface PRItemProps {
   pr: any;
@@ -380,7 +411,8 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               <ReviewStatusBadge reviewStatus={reviewStatus} isLoading={reviewsLoading} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
-              <span className={`font-medium ${theme.textPrimary} break-words`}>
+              <span className={`font-medium ${theme.textPrimary} break-words flex items-center gap-1.5`}>
+                <CopyButton text={pr.head.ref} label="branch name" />
                 <a
                   href={pr.html_url}
                   target="_blank"
