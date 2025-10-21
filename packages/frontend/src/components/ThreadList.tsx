@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { CommentThread } from '@review-app/shared';
 import { theme } from '../lib/theme';
 import { ThreadStatusBadge } from './ThreadStatusBadge';
-import { ThreadResolutionButton } from './ThreadResolutionButton';
-import { getThreadReplyCount } from '../lib/threadUtils';
 
 interface ThreadListProps {
   threads: CommentThread[];
@@ -16,20 +14,28 @@ interface ThreadListProps {
 export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isLoading = false }: ThreadListProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // Group threads by file
-  const threadsByFile = new Map<string, CommentThread[]>();
-  for (const thread of threads) {
-    if (!threadsByFile.has(thread.path)) {
-      threadsByFile.set(thread.path, []);
-    }
-    threadsByFile.get(thread.path)!.push(thread);
-  }
+  // Sort threads: unresolved first, then resolved
+  const sortedThreads = [...threads].sort((a, b) => {
+    if (a.resolved === b.resolved) return 0;
+    return a.resolved ? 1 : -1;
+  });
+
+  const getFilename = (path: string) => {
+    const parts = path.split('/');
+    return parts[parts.length - 1];
+  };
+
+  const truncateComment = (text: string, maxLength: number = 35) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
 
   const resolvedCount = threads.filter((t) => t.resolved).length;
   const totalCount = threads.length;
+  const unresolvedCount = totalCount - resolvedCount;
 
   return (
-    <div className={`${theme.card} mb-6`}>
+    <div className={`${theme.card}`}>
       {/* Header */}
       <div className={`px-6 py-4 border-b ${theme.border} flex items-center justify-between`}>
         <div className="flex items-center gap-3">
@@ -49,74 +55,91 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
 
       {/* Thread list */}
       {isExpanded && (
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4">
           {threads.length === 0 ? (
             <p className={theme.textSecondary}>No comment threads yet.</p>
           ) : (
-            Array.from(threadsByFile.entries()).map(([file, fileThreads]) => (
-              <div key={file} className="space-y-2">
-                {/* File header */}
-                <h3 className={`text-sm font-medium ${theme.textPrimary} flex items-center gap-2`}>
-                  <span>{file}</span>
-                  <span className={`text-xs ${theme.textSecondary}`}>
-                    ({fileThreads.length} thread{fileThreads.length === 1 ? '' : 's'})
-                  </span>
-                </h3>
-
-                {/* Threads in this file */}
-                <div className="space-y-2 ml-4">
-                  {fileThreads.map((thread) => (
-                    <div
-                      key={thread.id}
-                      className={`p-3 rounded border ${
-                        thread.resolved
-                          ? 'border-everforest-green/30 bg-everforest-bg0/50 opacity-75'
-                          : 'border-everforest-bg4 bg-everforest-bg1'
-                      } ${onThreadClick ? 'cursor-pointer hover:bg-everforest-bg2' : ''}`}
-                      onClick={() => onThreadClick?.(thread)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {/* Thread header */}
-                          <div className="flex items-center gap-2 mb-1">
-                            <ThreadStatusBadge resolved={thread.resolved} />
-                            <span className={`text-xs ${theme.textSecondary}`}>
-                              Line {thread.line}
-                            </span>
-                            {getThreadReplyCount(thread) > 0 && (
-                              <span className={`text-xs ${theme.textSecondary}`}>
-                                · {getThreadReplyCount(thread)} repl{getThreadReplyCount(thread) === 1 ? 'y' : 'ies'}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Comment preview */}
-                          <p className={`text-sm ${theme.textPrimary} line-clamp-2`}>
-                            {thread.parentComment.body}
-                          </p>
-
-                          {/* Comment metadata */}
-                          <div className={`mt-1 text-xs ${theme.textSecondary}`}>
-                            by {thread.parentComment.user.login}
-                          </div>
-                        </div>
-
-                        {/* Resolution button */}
-                        <div className="flex-shrink-0">
-                          <ThreadResolutionButton
-                            threadId={thread.id}
-                            resolved={thread.resolved}
-                            onResolve={onResolve}
-                            onUnresolve={onUnresolve}
-                            isLoading={isLoading}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+            <>
+              {/* Unresolved threads section */}
+              {unresolvedCount > 0 && (
+                <div className="mb-3">
+                  <div className={`text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2`}>
+                    <ThreadStatusBadge resolved={false} />
+                    <span>({unresolvedCount})</span>
+                  </div>
+                  <div className={`border ${theme.border} rounded overflow-hidden`}>
+                    <table className="w-full">
+                      <tbody>
+                        {sortedThreads.filter(t => !t.resolved).map((thread) => (
+                          <tr
+                            key={thread.id}
+                            className={`border-b last:border-b-0 ${theme.border} ${theme.bgPrimary} ${
+                              onThreadClick ? 'cursor-pointer hover:bg-everforest-bg2' : ''
+                            }`}
+                            onClick={() => onThreadClick?.(thread)}
+                          >
+                            <td className={`py-2 px-3 text-sm ${theme.textPrimary}`}>
+                              {truncateComment(thread.parentComment.body)}
+                            </td>
+                            <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
+                              {getFilename(thread.path)}
+                            </td>
+                            <td className="py-2 px-3 w-8">
+                              <img
+                                src={thread.parentComment.user.avatar_url}
+                                alt={thread.parentComment.user.login}
+                                className="h-6 w-6 rounded-full"
+                                title={thread.parentComment.user.login}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))
+              )}
+
+              {/* Resolved threads section */}
+              {resolvedCount > 0 && (
+                <div>
+                  <div className={`text-xs font-medium ${theme.textSecondary} mb-1 px-2 flex items-center gap-2`}>
+                    <ThreadStatusBadge resolved={true} />
+                    <span>({resolvedCount})</span>
+                  </div>
+                  <div className={`border ${theme.border} rounded overflow-hidden`}>
+                    <table className="w-full">
+                      <tbody>
+                        {sortedThreads.filter(t => t.resolved).map((thread) => (
+                          <tr
+                            key={thread.id}
+                            className={`border-b last:border-b-0 ${theme.border} ${theme.bgPrimary} opacity-60 ${
+                              onThreadClick ? 'cursor-pointer hover:bg-everforest-bg2' : ''
+                            }`}
+                            onClick={() => onThreadClick?.(thread)}
+                          >
+                            <td className={`py-2 px-3 text-sm ${theme.textPrimary}`}>
+                              {truncateComment(thread.parentComment.body)}
+                            </td>
+                            <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
+                              {getFilename(thread.path)}
+                            </td>
+                            <td className="py-2 px-3 w-8">
+                              <img
+                                src={thread.parentComment.user.avatar_url}
+                                alt={thread.parentComment.user.login}
+                                className="h-6 w-6 rounded-full"
+                                title={thread.parentComment.user.login}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

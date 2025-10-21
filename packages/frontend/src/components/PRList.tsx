@@ -403,7 +403,8 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
             #{index + 1}
           </span>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Badges on first line */}
+            <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                 {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Open'}
               </span>
@@ -411,19 +412,20 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               <ReviewStatusBadge reviewStatus={reviewStatus} isLoading={reviewsLoading} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
-              <span className={`font-medium ${theme.textPrimary} break-words flex items-center gap-1.5`}>
-                <CopyButton text={pr.head.ref} label="branch name" />
-                <a
-                  href={pr.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className={`${theme.textLink} hover:underline`}
-                >
-                  #{pr.number}
-                </a>
-                {' '}{pr.title}
-              </span>
+            </div>
+            {/* Title on second line */}
+            <div className={`font-medium ${theme.textPrimary} break-words flex items-center gap-1.5`}>
+              <CopyButton text={pr.head.ref} label="branch name" />
+              <a
+                href={pr.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className={`${theme.textLink} hover:underline`}
+              >
+                #{pr.number}
+              </a>
+              {' '}{pr.title}
             </div>
           </div>
         </div>

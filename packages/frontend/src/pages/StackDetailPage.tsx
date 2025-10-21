@@ -941,73 +941,78 @@ export function StackDetailPage() {
           )}
         </div>
 
-        {/* General Reviews (non-code-specific comments) */}
-        {selectedPR && generalReviews.length > 0 && (
-          <div className={`${theme.card} mb-6`}>
-          <div className={`px-6 py-4 border-b ${theme.border}`}>
-            <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
-              Reviews ({generalReviews.length})
-            </h2>
-          </div>
-          <div className="px-6 py-4 space-y-4">
-            {generalReviews.map((review) => (
-              <div key={review.id} className={`border-l-2 ${
-                review.state === 'APPROVED' ? 'border-everforest-green' :
-                review.state === 'CHANGES_REQUESTED' ? 'border-everforest-red' :
-                review.state === 'COMMENTED' ? 'border-everforest-blue' :
-                'border-everforest-grey0'
-              } pl-4`}>
-                <div className="flex items-start gap-3">
-                  <img
-                    src={review.user.avatar_url}
-                    alt={review.user.login}
-                    className="h-8 w-8 rounded-full flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-medium ${theme.textPrimary}`}>
-                        {review.user.login}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        review.state === 'APPROVED' ? theme.statusOpen :
-                        review.state === 'CHANGES_REQUESTED' ? theme.statusClosed :
-                        theme.statusDraft
-                      }`}>
-                        {review.state === 'CHANGES_REQUESTED' ? 'Changes Requested' : review.state}
-                      </span>
-                      <span className={`text-xs ${theme.textMuted}`}>
-                        {new Date(review.submitted_at).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className={`mt-2 text-sm ${theme.textSecondary} whitespace-pre-wrap`}>
-                      {review.body}
-                    </div>
-                    <a
-                      href={review.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`mt-2 inline-block text-xs ${theme.textLink}`}
-                    >
-                      View on GitHub →
-                    </a>
-                  </div>
+        {/* Reviews and Comment Threads Side-by-Side */}
+        {selectedPR && (
+          <div className="flex gap-6 mb-6">
+            {/* General Reviews (non-code-specific comments) */}
+            <div className={`flex-[3] ${theme.card}`}>
+                <div className={`px-6 py-4 border-b ${theme.border}`}>
+                  <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
+                    Reviews ({generalReviews.length})
+                  </h2>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
+                <div className="px-6 py-4 space-y-4">
+                  {generalReviews.length === 0 ? (
+                    <p className={`text-xs ${theme.textSecondary}`}>No reviews yet.</p>
+                  ) : (
+                    generalReviews.map((review) => (
+                    <div key={review.id} className={`border-l-2 ${
+                      review.state === 'APPROVED' ? 'border-everforest-green' :
+                      review.state === 'CHANGES_REQUESTED' ? 'border-everforest-red' :
+                      review.state === 'COMMENTED' ? 'border-everforest-blue' :
+                      'border-everforest-grey0'
+                    } pl-4`}>
+                      <div className="flex items-start gap-3">
+                        <img
+                          src={review.user.avatar_url}
+                          alt={review.user.login}
+                          className="h-8 w-8 rounded-full flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-medium ${theme.textPrimary}`}>
+                              {review.user.login}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              review.state === 'APPROVED' ? theme.statusOpen :
+                              review.state === 'CHANGES_REQUESTED' ? theme.statusClosed :
+                              theme.statusDraft
+                            }`}>
+                              {review.state === 'CHANGES_REQUESTED' ? 'Changes Requested' : review.state}
+                            </span>
+                            <span className={`text-xs ${theme.textMuted}`}>
+                              {new Date(review.submitted_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className={`mt-2 text-sm ${theme.textSecondary} whitespace-pre-wrap`}>
+                            {review.body}
+                          </div>
+                          <a
+                            href={review.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`mt-2 inline-block text-xs ${theme.textLink}`}
+                          >
+                            View on GitHub →
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                  )}
+                </div>
+            </div>
 
-        {/* Comment Threads */}
-        {selectedPR && threads && threads.length > 0 && (
-          <div className="mb-6">
-            <ThreadList
-              threads={threads}
-              onResolve={(threadId) => resolveThread.mutate(threadId)}
-              onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
-              onThreadClick={handleThreadClick}
-              isLoading={resolveThread.isPending || unresolveThread.isPending}
-            />
+            {/* Comment Threads */}
+            <div className="flex-[2]">
+              <ThreadList
+                threads={threads || []}
+                onResolve={(threadId) => resolveThread.mutate(threadId)}
+                onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
+                onThreadClick={handleThreadClick}
+                isLoading={resolveThread.isPending || unresolveThread.isPending}
+              />
+            </div>
           </div>
         )}
 

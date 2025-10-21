@@ -10,7 +10,7 @@ interface CIStatusPanelProps {
 
 export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPending }: CIStatusPanelProps) {
   return (
-    <div className={`w-80 flex-shrink-0 ${theme.card} sticky top-6 self-stretch`}>
+    <div className={`w-80 flex-shrink-0 ${theme.card} self-stretch`}>
       <div className={`px-4 py-3 ${theme.border}`}>
         <div className="flex items-center justify-between mb-3">
           <h3 className={`text-sm font-medium ${theme.textPrimary}`}>
