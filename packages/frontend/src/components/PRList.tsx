@@ -22,29 +22,87 @@ interface PRItemProps {
   threadsMap: Map<number, CommentThread[]>;
 }
 
-// Hook to get CI status for a PR
+// Hook to get CI status for a PR - matches GitHub's actual mergeability logic
 function useCIStatus(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
   const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']);
 
-  const failedChecks = checkRuns?.filter((c) => c.conclusion === 'failure').length || 0;
-  const inProgressChecks = checkRuns?.filter((c) => c.status === 'in_progress').length || 0;
-  const queuedChecks = checkRuns?.filter((c) => c.status === 'queued').length || 0;
-  const passedChecks = checkRuns?.filter((c) => c.conclusion === 'success').length || 0;
+  // Blocking states that prevent merge
+  const blockingChecks = checkRuns?.filter((c) =>
+    c.conclusion === 'failure' ||
+    c.conclusion === 'timed_out' ||
+    c.conclusion === 'action_required'
+  ).length || 0;
+
+  // In-progress states
+  const inProgressChecks = checkRuns?.filter((c) =>
+    c.status === 'in_progress' ||
+    c.status === 'queued'
+  ).length || 0;
+
+  // Non-blocking states (success, skipped, cancelled, neutral)
+  const nonBlockingChecks = checkRuns?.filter((c) =>
+    c.conclusion === 'success' ||
+    c.conclusion === 'skipped' ||
+    c.conclusion === 'cancelled' ||
+    c.conclusion === 'neutral'
+  ).length || 0;
+
   const totalChecks = checkRuns?.length || 0;
 
   return {
     checkRuns,
     isLoading: false,
-    failedChecks,
+    blockingChecks,
     inProgressChecks,
-    queuedChecks,
-    passedChecks,
+    nonBlockingChecks,
     totalChecks,
-    hasFailed: failedChecks > 0,
-    isRunning: inProgressChecks > 0 || queuedChecks > 0,
-    allPassed: totalChecks > 0 && passedChecks === totalChecks,
+    hasBlocking: blockingChecks > 0,
+    isRunning: inProgressChecks > 0,
+    allPassed: totalChecks > 0 && nonBlockingChecks === totalChecks,
   };
+}
+
+// Component to display merge conflict badge for a PR
+function MergeConflictBadge({ pr, owner, repo }: { pr: any; owner: string; repo: string }) {
+  const queryClient = useQueryClient();
+
+  // Get full PR details from cache (includes mergeable status)
+  const fullPR = queryClient.getQueryData<any>(['prs', owner, repo, pr.number]);
+
+  // Use the full PR data if available, otherwise fall back to the pr prop
+  const prData = fullPR || pr;
+
+  // Debug: Log the mergeable status
+  console.log(`PR #${pr.number} mergeable status:`, {
+    mergeable: prData.mergeable,
+    mergeable_state: prData.mergeable_state,
+    type: typeof prData.mergeable,
+    hasFullData: !!fullPR
+  });
+
+  // pr.mergeable is null when GitHub hasn't calculated it yet, false when there are conflicts, true when it's mergeable
+  // pr.mergeable_state can be: 'clean', 'dirty', 'unstable', 'blocked', 'behind', 'unknown', etc.
+
+  // Show conflicts badge if mergeable is explicitly false OR if mergeable_state is 'dirty'
+  if (prData.mergeable === false || prData.mergeable_state === 'dirty') {
+    return (
+      <span className="px-2 py-0.5 rounded text-xs font-medium bg-everforest-red/20 text-everforest-red">
+        ⚠ Conflicts
+      </span>
+    );
+  }
+
+  // Optionally show if behind or blocked
+  if (prData.mergeable_state === 'behind') {
+    return (
+      <span className="px-2 py-0.5 rounded text-xs font-medium bg-everforest-yellow/20 text-everforest-yellow">
+        ⚠ Behind
+      </span>
+    );
+  }
+
+  return null; // Don't show badge if there are no conflicts
 }
 
 // Component to display CI status badge for a PR
@@ -67,18 +125,18 @@ function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string;
   let badgeText = '';
   let badgeIcon = '';
 
-  if (ciStatus.hasFailed) {
+  if (ciStatus.hasBlocking) {
     badgeColor = 'bg-everforest-red/20 text-everforest-red';
     badgeIcon = '✗';
-    badgeText = `CI: ${ciStatus.failedChecks} failed`;
+    badgeText = `CI: ${ciStatus.blockingChecks} failed`;
   } else if (ciStatus.isRunning) {
     badgeColor = 'bg-everforest-yellow/20 text-everforest-yellow';
     badgeIcon = '⟳';
-    badgeText = `CI: ${ciStatus.inProgressChecks + ciStatus.queuedChecks} running`;
+    badgeText = `CI: ${ciStatus.inProgressChecks} running`;
   } else if (ciStatus.allPassed) {
     badgeColor = 'bg-everforest-green/20 text-everforest-green';
     badgeIcon = '✓';
-    badgeText = `CI: ${ciStatus.passedChecks} passed`;
+    badgeText = `CI: ${ciStatus.nonBlockingChecks} passed`;
   } else {
     badgeColor = 'bg-everforest-bg3 text-everforest-grey0';
     badgeIcon = '○';
@@ -177,24 +235,32 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
         break;
       }
 
-      // Check CI status for this PR
+      // Check CI status for this PR using GitHub's mergeability logic
       const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, checkPr.number, 'checks']);
       if (checkRuns && checkRuns.length > 0) {
-        const failedChecks = checkRuns.filter((c) => c.conclusion === 'failure').length;
-        const inProgressChecks = checkRuns.filter((c) => c.status === 'in_progress').length;
-        const queuedChecks = checkRuns.filter((c) => c.status === 'queued').length;
+        // Blocking states that prevent merge
+        const blockingChecks = checkRuns.filter((c) =>
+          c.conclusion === 'failure' ||
+          c.conclusion === 'timed_out' ||
+          c.conclusion === 'action_required'
+        ).length;
 
-        if (failedChecks > 0) {
+        const inProgressChecks = checkRuns.filter((c) =>
+          c.status === 'in_progress' ||
+          c.status === 'queued'
+        ).length;
+
+        if (blockingChecks > 0) {
           mergeButtonText = '⚠ CI Failed';
-          mergeButtonTooltip = `PR #${checkPr.number} has ${failedChecks} failing CI check${failedChecks > 1 ? 's' : ''}. Fix the failures before merging.`;
+          mergeButtonTooltip = `PR #${checkPr.number} has ${blockingChecks} failing CI check${blockingChecks > 1 ? 's' : ''}. Fix the failures before merging.`;
           mergeButtonDisabled = true;
           canMerge = false;
           break;
         }
 
-        if (inProgressChecks > 0 || queuedChecks > 0) {
+        if (inProgressChecks > 0) {
           mergeButtonText = '⟳ CI Running';
-          mergeButtonTooltip = `PR #${checkPr.number} has ${inProgressChecks + queuedChecks} CI check${inProgressChecks + queuedChecks > 1 ? 's' : ''} in progress. Wait for CI to complete before merging.`;
+          mergeButtonTooltip = `PR #${checkPr.number} has ${inProgressChecks} CI check${inProgressChecks > 1 ? 's' : ''} in progress. Wait for CI to complete before merging.`;
           mergeButtonDisabled = true;
           canMerge = false;
           break;
@@ -292,6 +358,7 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                 {pr.draft ? 'Draft' : pr.merged_at ? 'Merged' : pr.state === 'closed' ? 'Closed' : 'Open'}
               </span>
+              <MergeConflictBadge pr={pr} owner={owner} repo={repo} />
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
               {reviewStatus && <ReviewStatusBadge reviewStatus={reviewStatus} />}
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
