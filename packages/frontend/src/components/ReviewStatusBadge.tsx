@@ -4,9 +4,19 @@ import { getReviewStatusShortLabel } from '../lib/reviewStatus';
 
 interface ReviewStatusBadgeProps {
   reviewStatus?: ReviewStatusInfo;
+  isLoading?: boolean;
 }
 
-export function ReviewStatusBadge({ reviewStatus }: ReviewStatusBadgeProps) {
+export function ReviewStatusBadge({ reviewStatus, isLoading }: ReviewStatusBadgeProps) {
+  // Show loading state while fetching
+  if (isLoading) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium border rounded bg-everforest-bg3/50 text-everforest-grey0 border-everforest-bg4/50 animate-pulse">
+        Reviews: ...
+      </span>
+    );
+  }
+
   // If no review status provided, show "Needs Reviewers"
   if (!reviewStatus) {
     return (

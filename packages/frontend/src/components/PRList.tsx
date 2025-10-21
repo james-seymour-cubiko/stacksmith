@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { theme } from '../lib/theme';
 import type { GithubCheckRun, GithubReview, ReviewStatusInfo, CommentThread } from '../../../shared/src/types';
 import { useBulkPRReviews, useBulkPRThreads } from '../hooks/usePRs';
@@ -20,12 +20,19 @@ interface PRItemProps {
   reviewStatus?: ReviewStatusInfo;
   reviewsMap: Map<number, GithubReview[]>;
   threadsMap: Map<number, CommentThread[]>;
+  reviewsLoading: boolean;
 }
 
 // Hook to get CI status for a PR - matches GitHub's actual mergeability logic
 function useCIStatus(owner: string, repo: string, prNumber: number) {
   const queryClient = useQueryClient();
-  const checkRuns = queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']);
+
+  // Use useQuery to subscribe to changes instead of just reading from cache
+  const { data: checkRuns, isLoading } = useQuery({
+    queryKey: ['prs', owner, repo, prNumber, 'checks'],
+    enabled: false, // Don't fetch, just subscribe to cache updates
+    initialData: () => queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']),
+  });
 
   // Blocking states that prevent merge
   const blockingChecks = checkRuns?.filter((c) =>
@@ -52,7 +59,7 @@ function useCIStatus(owner: string, repo: string, prNumber: number) {
 
   return {
     checkRuns,
-    isLoading: false,
+    isLoading,
     blockingChecks,
     inProgressChecks,
     nonBlockingChecks,
@@ -80,6 +87,15 @@ function MergeConflictBadge({ pr, owner, repo }: { pr: any; owner: string; repo:
     type: typeof prData.mergeable,
     hasFullData: !!fullPR
   });
+
+  // If we don't have full PR data yet, show loading state
+  if (!fullPR && prData.mergeable === undefined && prData.mergeable_state === undefined) {
+    return (
+      <span className="px-2 py-0.5 rounded text-xs font-medium bg-everforest-bg3/50 text-everforest-grey0 animate-pulse">
+        Merge: ...
+      </span>
+    );
+  }
 
   // pr.mergeable is null when GitHub hasn't calculated it yet, false when there are conflicts, true when it's mergeable
   // pr.mergeable_state can be: 'clean', 'dirty', 'unstable', 'blocked', 'behind', 'unknown', etc.
@@ -109,15 +125,17 @@ function MergeConflictBadge({ pr, owner, repo }: { pr: any; owner: string; repo:
 function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string; prNumber: number }) {
   const ciStatus = useCIStatus(owner, repo, prNumber);
 
-  if (ciStatus.isLoading) {
+  // Show loading state while fetching
+  if (!ciStatus.checkRuns) {
     return (
-      <span className={`px-2 py-0.5 rounded text-xs font-medium bg-everforest-bg3 text-everforest-grey0`}>
+      <span className="px-2 py-0.5 rounded text-xs font-medium bg-everforest-bg3/50 text-everforest-grey0 animate-pulse">
         CI: ...
       </span>
     );
   }
 
-  if (!ciStatus.checkRuns || ciStatus.totalChecks === 0) {
+  // Don't show badge if there are no CI checks
+  if (ciStatus.totalChecks === 0) {
     return null;
   }
 
@@ -150,7 +168,7 @@ function CIStatusBadge({ owner, repo, prNumber }: { owner: string; repo: string;
   );
 }
 
-function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo, reviewStatus, reviewsMap, threadsMap }: PRItemProps) {
+function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sortedPRs, currentUser, owner, repo, reviewStatus, reviewsMap, threadsMap, reviewsLoading }: PRItemProps) {
   const queryClient = useQueryClient();
 
   // Calculate how many branches need to be merged (from base to current, excluding already merged)
@@ -360,28 +378,20 @@ function PRItem({ pr, index, isSelected, onSelect, onMerge, mergePending, sorted
               </span>
               <MergeConflictBadge pr={pr} owner={owner} repo={repo} />
               <CIStatusBadge owner={owner} repo={repo} prNumber={pr.number} />
-              <ReviewStatusBadge reviewStatus={reviewStatus} />
+              <ReviewStatusBadge reviewStatus={reviewStatus} isLoading={reviewsLoading} />
               <ThreadCountBadge resolvedCount={resolvedThreadCount} totalCount={totalThreadCount} />
-              <span className={`font-medium ${theme.textPrimary} truncate`}>
-                #{pr.number} {pr.title}
+              <span className={`font-medium ${theme.textPrimary} break-words`}>
+                <a
+                  href={pr.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`${theme.textLink} hover:underline`}
+                >
+                  #{pr.number}
+                </a>
+                {' '}{pr.title}
               </span>
-            </div>
-            <div className={`mt-1 text-xs ${theme.textSecondary} flex items-center gap-2 flex-wrap`}>
-              <span>{pr.head.ref} → {pr.base.ref}</span>
-              {isBasePR && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium bg-everforest-purple/20 text-everforest-purple`}>
-                  Base PR
-                </span>
-              )}
-              <a
-                href={pr.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`${theme.textLink} text-xs`}
-              >
-                GitHub →
-              </a>
             </div>
           </div>
         </div>
@@ -437,6 +447,7 @@ export function PRList({ sortedPRs, currentPRNumber, onSelectPR, onMergePR, merg
               reviewStatus={reviewStatus}
               reviewsMap={reviewsMap}
               threadsMap={threadsMap}
+              reviewsLoading={isLoading}
             />
           );
         })}
