@@ -89,6 +89,12 @@ export interface GithubComment {
   commit_id?: string;
   in_reply_to_id?: number;  // Parent comment ID for replies
   conversation_id?: string;   // GitHub's conversation/thread ID (from GraphQL)
+  // Outdated comment fields (when code has changed since comment was made)
+  position?: number | null;  // null when comment is outdated
+  original_position?: number;  // Original position in the diff
+  diff_hunk?: string;  // Code snippet that was commented on
+  original_line?: number;  // Original line number
+  original_commit_id?: string;  // Commit the comment was made on
 }
 
 export interface CommentThread {
@@ -99,6 +105,8 @@ export interface CommentThread {
   path: string;                   // File path where thread exists
   line: number;                   // Line number where thread exists
   unresolvedCount?: number;       // For aggregation purposes
+  outdated?: boolean;             // Whether this thread is on outdated code
+  diffHunk?: string;              // Original code snippet (for outdated threads)
 }
 
 export interface ThreadResolutionInfo {

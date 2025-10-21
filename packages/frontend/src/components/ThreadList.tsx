@@ -79,7 +79,14 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                             onClick={() => onThreadClick?.(thread)}
                           >
                             <td className={`py-2 px-3 text-sm ${theme.textPrimary}`}>
-                              {truncateComment(thread.parentComment.body)}
+                              <div className="flex items-center gap-2">
+                                <span className="flex-1">{truncateComment(thread.parentComment.body)}</span>
+                                {thread.outdated && (
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium bg-everforest-yellow/20 text-everforest-yellow flex-shrink-0`} title="Outdated - on previous code">
+                                    ⏱
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
                               {getFilename(thread.path)}
@@ -119,7 +126,14 @@ export function ThreadList({ threads, onResolve, onUnresolve, onThreadClick, isL
                             onClick={() => onThreadClick?.(thread)}
                           >
                             <td className={`py-2 px-3 text-sm ${theme.textPrimary}`}>
-                              {truncateComment(thread.parentComment.body)}
+                              <div className="flex items-center gap-2">
+                                <span className="flex-1">{truncateComment(thread.parentComment.body)}</span>
+                                {thread.outdated && (
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium bg-everforest-yellow/20 text-everforest-yellow flex-shrink-0`} title="Outdated - on previous code">
+                                    ⏱
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className={`py-2 px-3 text-xs ${theme.textSecondary} w-32`}>
                               {getFilename(thread.path)}

@@ -13,11 +13,12 @@ import { ThreadList } from '../components/ThreadList';
 import { ThreadStatusBadge } from '../components/ThreadStatusBadge';
 import { ThreadResolutionButton } from '../components/ThreadResolutionButton';
 import { ThreadCountBadge } from '../components/ThreadCountBadge';
+import { OutdatedThreadsSection } from '../components/OutdatedThreadsSection';
 import { getLanguageFromFilename } from '../lib/languageMapper';
 import { configAPI } from '../lib/api';
 import { getUnresolvedCountByFile, findThreadById } from '../lib/threadUtils';
 import DiffMatchPatch from 'diff-match-patch';
-import type { GithubDiff, GithubPR, GithubCheckRun } from '@review-app/shared';
+import type { GithubDiff, GithubPR, GithubCheckRun, CommentThread } from '@review-app/shared';
 
 // Copy button component with visual feedback
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -198,6 +199,17 @@ export function StackDetailPage() {
   // Fetch threads for selected PR
   const { data: threads } = usePRThreads(owner, repo, currentPRNumber);
 
+  // Separate current and outdated threads
+  const currentThreads = threads?.filter(t => !t.outdated) || [];
+  const outdatedThreads = threads?.filter(t => t.outdated) || [];
+
+  // Group outdated threads by file path
+  const outdatedThreadsByFile = new Map<string, CommentThread[]>();
+  outdatedThreads.forEach(thread => {
+    const existing = outdatedThreadsByFile.get(thread.path) || [];
+    outdatedThreadsByFile.set(thread.path, [...existing, thread]);
+  });
+
   // Fetch collaborators
   const { data: collaborators } = useCollaborators(owner, repo);
 
@@ -285,6 +297,7 @@ export function StackDetailPage() {
 
   // Track expanded files in diff view (files are collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string> | null>(null);
+  const [expandedOutdatedSections, setExpandedOutdatedSections] = useState<Set<string>>(new Set());
 
   // Initialize all files as collapsed when diff loads
   useEffect(() => {
@@ -313,6 +326,16 @@ export function StackDetailPage() {
       if (!expandedFiles?.has(thread.path)) {
         toggleFileExpanded(thread.path);
       }
+
+      // If this is an outdated thread, expand the outdated section
+      if (thread.outdated) {
+        setExpandedOutdatedSections(prev => {
+          const next = new Set(prev);
+          next.add(thread.path);
+          return next;
+        });
+      }
+
       // Expand the thread if it's collapsed
       setCollapsedThreads(prev => {
         const next = new Set(prev);
@@ -1360,6 +1383,36 @@ export function StackDetailPage() {
                         </div>
                       </button>
 
+                      {/* Outdated Threads Section */}
+                      {expandedFiles?.has(file.filename) && outdatedThreadsByFile.has(file.filename) && (
+                        <OutdatedThreadsSection
+                          threads={outdatedThreadsByFile.get(file.filename)!}
+                          onReply={(threadId, commentId, body) => {
+                            replyToComment.mutate({ commentId, body });
+                          }}
+                          onResolve={(threadId) => resolveThread.mutate(threadId)}
+                          onUnresolve={(threadId) => unresolveThread.mutate(threadId)}
+                          onDelete={(commentId) => deleteComment.mutate(commentId)}
+                          replyPending={replyToComment.isPending}
+                          deletePending={deleteComment.isPending}
+                          resolvePending={resolveThread.isPending}
+                          unresolvePending={unresolveThread.isPending}
+                          language={language}
+                          isExpanded={expandedOutdatedSections.has(file.filename)}
+                          onToggleExpanded={() => {
+                            setExpandedOutdatedSections(prev => {
+                              const next = new Set(prev);
+                              if (next.has(file.filename)) {
+                                next.delete(file.filename);
+                              } else {
+                                next.add(file.filename);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                      )}
+
                       {/* Split Diff View */}
                       {file.patch && expandedFiles?.has(file.filename) && (
                         <div className="flex overflow-x-auto">
@@ -1390,9 +1443,10 @@ export function StackDetailPage() {
 
                                 // Find existing threads for this line
                                 // For the left side, only show threads with side === 'LEFT'
-                                const lineThreads = threads?.filter(
+                                // Only show current threads (outdated threads shown in separate section)
+                                const lineThreads = currentThreads.filter(
                                   (t) => t.path === file.filename && t.line === line.lineNum && t.parentComment.side === 'LEFT'
-                                ) || [];
+                                );
 
                                 return (
                                   <div key={index}>
@@ -1727,9 +1781,10 @@ export function StackDetailPage() {
 
                                 // Find existing threads for this line
                                 // For the right side, only show threads with side === 'RIGHT'
-                                const lineThreads = threads?.filter(
+                                // Only show current threads (outdated threads shown in separate section)
+                                const lineThreads = currentThreads.filter(
                                   (t) => t.path === file.filename && t.line === line.lineNum && t.parentComment.side === 'RIGHT'
-                                ) || [];
+                                );
 
                                 return (
                                   <div key={index}>

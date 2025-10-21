@@ -135,6 +135,12 @@ export class GithubService {
       side: comment.side as 'LEFT' | 'RIGHT' | undefined,
       commit_id: comment.commit_id,
       in_reply_to_id: comment.in_reply_to_id || undefined,
+      // Outdated comment tracking
+      position: comment.position,
+      original_position: comment.original_position || undefined,
+      diff_hunk: comment.diff_hunk || undefined,
+      original_line: comment.original_line || undefined,
+      original_commit_id: comment.original_commit_id || undefined,
     }));
   }
 
@@ -793,7 +799,9 @@ export class GithubService {
             })),
             resolved: thread.isResolved,
             path: parentComment.path!,
-            line: parentComment.line!,
+            line: parentComment.line || parentComment.original_line!,
+            outdated: thread.isOutdated || (parentComment.position === null && !!parentComment.original_position),
+            diffHunk: parentComment.diff_hunk,
           });
         }
       }
@@ -828,13 +836,16 @@ export class GithubService {
       if (!comment.in_reply_to_id && comment.path) {
         // This is a parent comment
         const replies = threadMap.get(comment.id) || [];
+        const isOutdated = comment.position === null && !!comment.original_position;
         threads.push({
           id: `fallback-${comment.id}`,
           parentComment: comment,
           replies,
           resolved: false, // Can't determine without GraphQL
           path: comment.path,
-          line: comment.line!,
+          line: comment.line || comment.original_line!,
+          outdated: isOutdated,
+          diffHunk: comment.diff_hunk,
         });
       }
     }
