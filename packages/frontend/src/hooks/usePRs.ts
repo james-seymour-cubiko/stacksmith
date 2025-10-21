@@ -198,6 +198,7 @@ export function useRequestReviewers(owner: string, repo: string, prNumber: numbe
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber] });
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'reviews'] });
+      queryClient.invalidateQueries({ queryKey: ['stacks'] });
     },
   });
 }
@@ -320,5 +321,17 @@ export function useUnresolveThread(owner: string, repo: string, prNumber: number
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'thread-resolution-info'] });
       queryClient.invalidateQueries({ queryKey: ['prs', owner, repo, prNumber, 'comments'] });
     },
+  });
+}
+
+/**
+ * Fetches repository collaborators
+ */
+export function useCollaborators(owner: string | undefined, repo: string | undefined) {
+  return useQuery({
+    queryKey: ['collaborators', owner, repo],
+    queryFn: () => prsAPI.getCollaborators(owner!, repo!),
+    enabled: !!owner && !!repo,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 }

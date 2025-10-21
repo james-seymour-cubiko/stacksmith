@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useClosePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useClosePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread, useCollaborators } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
@@ -198,6 +198,9 @@ export function StackDetailPage() {
   // Fetch threads for selected PR
   const { data: threads } = usePRThreads(owner, repo, currentPRNumber);
 
+  // Fetch collaborators
+  const { data: collaborators } = useCollaborators(owner, repo);
+
   // Create comment mutations
   const createComment = useCreatePRComment(owner || '', repo || '', currentPRNumber || 0);
   const createIssueComment = useCreatePRIssueComment(owner || '', repo || '', currentPRNumber || 0);
@@ -310,6 +313,12 @@ export function StackDetailPage() {
       if (!expandedFiles?.has(thread.path)) {
         toggleFileExpanded(thread.path);
       }
+      // Expand the thread if it's collapsed
+      setCollapsedThreads(prev => {
+        const next = new Set(prev);
+        next.delete(thread.id);
+        return next;
+      });
       // Scroll to the file
       setTimeout(() => {
         fileElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -926,6 +935,7 @@ export function StackDetailPage() {
                 reviewsLoading={false}
                 onRequestReviewers={(usernames) => requestReviewers.mutate(usernames)}
                 requestReviewersPending={requestReviewers.isPending}
+                availableUsers={collaborators || []}
               />
             </div>
           )}
@@ -1006,17 +1016,17 @@ export function StackDetailPage() {
           <div className={`${theme.card} mb-6`}>
           <div className={`px-6 py-4 border-b ${theme.border} flex items-center justify-between`}>
             <div className="flex items-center gap-3">
-              <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
-                Comments ({issueComments?.length || 0})
-              </h2>
               {issueComments && issueComments.length > 0 && (
                 <button
                   onClick={() => setIsCommentsExpanded(!isCommentsExpanded)}
-                  className={`text-xs px-2 py-1 rounded ${theme.textSecondary} hover:bg-everforest-bg3 transition-colors`}
+                  className={`text-xs ${theme.textSecondary} hover:text-everforest-fg transition-colors`}
                 >
-                  {isCommentsExpanded ? '▼ Collapse' : '▶ Expand'}
+                  {isCommentsExpanded ? '▼' : '▶'}
                 </button>
               )}
+              <h2 className={`text-sm font-medium ${theme.textPrimary}`}>
+                Comments ({issueComments?.length || 0})
+              </h2>
             </div>
             {!isAddingPRComment && (
               <button

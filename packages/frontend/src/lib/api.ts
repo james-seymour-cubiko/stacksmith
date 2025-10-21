@@ -174,6 +174,9 @@ export const prsAPI = {
     fetchAPI<{ success: boolean; resolved: boolean }>(`/prs/${prNumber}/threads/${threadId}/unresolve?owner=${owner}&repo=${repo}`, {
       method: 'POST',
     }),
+
+  getCollaborators: (owner: string, repo: string) =>
+    fetchAPI<{ login: string; id: number; avatar_url: string; html_url: string }[]>(`/prs/collaborators?owner=${owner}&repo=${repo}`),
 };
 
 // Config API

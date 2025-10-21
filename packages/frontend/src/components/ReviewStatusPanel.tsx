@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { theme } from '../lib/theme';
 import type { GithubPR, GithubReview, GithubUser, PRReviewState } from '@review-app/shared';
 
@@ -8,6 +8,7 @@ interface ReviewStatusPanelProps {
   reviewsLoading: boolean;
   onRequestReviewers: (usernames: string[]) => void;
   requestReviewersPending: boolean;
+  availableUsers: GithubUser[];
 }
 
 interface ReviewerWithStatus {
@@ -23,9 +24,45 @@ export function ReviewStatusPanel({
   reviewsLoading,
   onRequestReviewers,
   requestReviewersPending,
+  availableUsers,
 }: ReviewStatusPanelProps) {
   const [isAddingReviewer, setIsAddingReviewer] = useState(false);
-  const [reviewerUsername, setReviewerUsername] = useState('');
+  const [selectedUsernames, setSelectedUsernames] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus search input when dropdown opens
+  useEffect(() => {
+    if (isAddingReviewer && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+    if (!isAddingReviewer) {
+      setSearchQuery('');
+    }
+  }, [isAddingReviewer]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        if (selectedUsernames.size > 0) {
+          // Submit selected reviewers
+          onRequestReviewers(Array.from(selectedUsernames));
+          setSelectedUsernames(new Set());
+        }
+        setIsAddingReviewer(false);
+      }
+    };
+
+    if (isAddingReviewer) {
+      // Use setTimeout to ensure state updates have completed
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 0);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isAddingReviewer, selectedUsernames, onRequestReviewers]);
 
   // Compute status for each reviewer
   const getReviewerStatus = (reviewer: GithubUser, isRequested: boolean): ReviewerWithStatus => {
@@ -90,12 +127,49 @@ export function ReviewStatusPanel({
 
   const allReviewers = [...requestedReviewers, ...unrequestedReviewers];
 
-  const handleAddReviewer = () => {
-    if (!reviewerUsername.trim()) return;
+  // Filter available users to exclude PR author and existing reviewers
+  const existingReviewerLogins = new Set(allReviewers.map(r => r.user.login));
+  const filteredAvailableUsers = availableUsers.filter(
+    user => user.login !== selectedPR.user.login && !existingReviewerLogins.has(user.login)
+  );
 
-    onRequestReviewers([reviewerUsername.trim()]);
-    setReviewerUsername('');
+  // Apply search filter
+  const searchFilteredUsers = filteredAvailableUsers.filter(user =>
+    user.login.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const toggleUserSelection = (username: string) => {
+    setSelectedUsernames(prev => {
+      const next = new Set(prev);
+      if (next.has(username)) {
+        next.delete(username);
+      } else {
+        next.add(username);
+      }
+      return next;
+    });
+  };
+
+  const handleSubmitReviewers = () => {
+    if (selectedUsernames.size === 0) return;
+    onRequestReviewers(Array.from(selectedUsernames));
+    setSelectedUsernames(new Set());
     setIsAddingReviewer(false);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      // If exactly one user in filtered list, select and submit
+      if (searchFilteredUsers.length === 1) {
+        const user = searchFilteredUsers[0];
+        onRequestReviewers([user.login]);
+        setSelectedUsernames(new Set());
+        setIsAddingReviewer(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsAddingReviewer(false);
+      setSelectedUsernames(new Set());
+    }
   };
 
   const getStatusDisplay = (status: PRReviewState | 'PENDING') => {
@@ -144,7 +218,7 @@ export function ReviewStatusPanel({
       <div className={`px-4 py-3 ${theme.border}`}>
         <div className="flex items-center justify-between mb-3">
           <h3 className={`text-sm font-medium ${theme.textPrimary}`}>
-            Reviews ({allReviewers.length})
+            Reviewers ({allReviewers.length})
           </h3>
           {!isAddingReviewer && (
             <button
@@ -221,47 +295,74 @@ export function ReviewStatusPanel({
           </div>
         )}
 
-        {/* Add Reviewer Form */}
+        {/* Add Reviewer Dropdown */}
         {isAddingReviewer && (
-          <div className={`mt-3 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
-            <label className={`text-xs font-medium ${theme.textPrimary} block mb-2`}>
-              GitHub Username
-            </label>
+          <div ref={dropdownRef} className={`mt-3 p-3 border ${theme.border} rounded ${theme.bgSecondary}`}>
+            <div className={`text-xs font-medium ${theme.textPrimary} mb-2`}>
+              Select reviewers ({selectedUsernames.size} selected)
+            </div>
+
+            {/* Search Input */}
             <input
+              ref={searchInputRef}
               type="text"
-              value={reviewerUsername}
-              onChange={(e) => setReviewerUsername(e.target.value)}
-              placeholder="username"
-              className={`block w-full px-3 py-2 border rounded-md ${theme.input} focus:outline-none focus:ring-2 focus:ring-everforest-green focus:border-transparent text-sm`}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleAddReviewer();
-                } else if (e.key === 'Escape') {
-                  setIsAddingReviewer(false);
-                  setReviewerUsername('');
-                }
-              }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search users..."
+              className={`w-full px-3 py-2 mb-2 border ${theme.border} rounded text-xs ${theme.textPrimary} ${theme.bgPrimary} focus:outline-none focus:ring-2 focus:ring-everforest-green`}
             />
-            <div className="mt-2 flex gap-2">
+
+            <div className="max-h-48 overflow-y-auto space-y-1 mb-3">
+              {searchFilteredUsers.length === 0 ? (
+                <p className={`text-xs ${theme.textMuted} text-center py-2`}>
+                  {searchQuery ? 'No users match your search' : 'No available users'}
+                </p>
+              ) : (
+                searchFilteredUsers.map((user) => (
+                  <label
+                    key={user.login}
+                    className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-everforest-bg2 transition-colors ${
+                      selectedUsernames.has(user.login) ? 'bg-everforest-bg3' : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUsernames.has(user.login)}
+                      onChange={() => toggleUserSelection(user.login)}
+                      className="rounded border-gray-300 text-everforest-green focus:ring-everforest-green"
+                    />
+                    <img
+                      src={user.avatar_url}
+                      alt={user.login}
+                      className="h-5 w-5 rounded-full"
+                    />
+                    <span className={`text-xs ${theme.textPrimary}`}>
+                      {user.login}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2">
               <button
-                onClick={handleAddReviewer}
-                disabled={!reviewerUsername.trim() || requestReviewersPending}
-                className={`px-3 py-1 rounded text-xs font-medium ${
-                  reviewerUsername.trim() && !requestReviewersPending
+                onClick={handleSubmitReviewers}
+                disabled={selectedUsernames.size === 0 || requestReviewersPending}
+                className={`flex-1 px-3 py-2 rounded text-xs font-medium ${
+                  selectedUsernames.size > 0 && !requestReviewersPending
                     ? 'bg-everforest-green text-everforest-bg0 hover:bg-everforest-green/90'
                     : 'bg-everforest-bg3 text-everforest-grey0 cursor-not-allowed'
                 }`}
               >
-                {requestReviewersPending ? 'Adding...' : 'Add'}
+                {requestReviewersPending ? 'Adding...' : `Add ${selectedUsernames.size > 0 ? `(${selectedUsernames.size})` : ''}`}
               </button>
               <button
                 onClick={() => {
                   setIsAddingReviewer(false);
-                  setReviewerUsername('');
+                  setSelectedUsernames(new Set());
                 }}
                 disabled={requestReviewersPending}
-                className={`px-3 py-1 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
+                className={`px-3 py-2 rounded text-xs ${theme.textSecondary} hover:bg-everforest-bg2`}
               >
                 Cancel
               </button>

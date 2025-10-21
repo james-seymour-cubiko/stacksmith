@@ -834,4 +834,33 @@ export const prRoutes: FastifyPluginAsync = async (server) => {
       }
     }
   );
+
+  // Get repository collaborators
+  typedServer.get(
+    '/collaborators',
+    {
+      schema: {
+        description: 'Get repository collaborators',
+        tags: ['prs'],
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { owner, repo } = request.query;
+        const service = getServiceFromQuery(owner, repo);
+        const collaborators = await service.getCollaborators();
+        return collaborators;
+      } catch (error: any) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error instanceof Error ? error.message : 'Failed to fetch collaborators',
+          statusCode: 500,
+        });
+      }
+    }
+  );
 };

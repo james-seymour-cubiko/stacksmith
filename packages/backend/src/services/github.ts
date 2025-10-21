@@ -914,6 +914,28 @@ export class GithubService {
       byFile,
     };
   }
+
+  async getCollaborators() {
+    this.ensureConfigured();
+
+    try {
+      const { data } = await this.octokit!.repos.listCollaborators({
+        owner: this.owner,
+        repo: this.repo,
+        per_page: 100,
+      });
+
+      return data.map((user: any) => ({
+        login: user.login,
+        id: user.id,
+        avatar_url: user.avatar_url,
+        html_url: user.html_url,
+      }));
+    } catch (error: any) {
+      console.error('Error fetching collaborators:', error);
+      throw new Error(`Failed to fetch collaborators: ${error.message}`);
+    }
+  }
 }
 
 // Singleton instance
