@@ -999,7 +999,7 @@ export function StackDetailPage() {
           </div>
           <div className="px-6 py-4 space-y-4">
             {issueComments && issueComments.length > 0 && isCommentsExpanded && issueComments.map((comment) => (
-              <div key={comment.id} className="border-l-2 border-everforest-aqua pl-4">
+              <div key={comment.id} className="border-2 border-everforest-aqua/40 bg-everforest-bg2 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <img
                     src={comment.user.avatar_url}
@@ -1015,7 +1015,7 @@ export function StackDetailPage() {
                         {new Date(comment.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <div className={`mt-2 text-sm ${theme.textSecondary} whitespace-pre-wrap`}>
+                    <div className={`mt-2 text-base ${theme.textPrimary} whitespace-pre-wrap`}>
                       {comment.body}
                     </div>
                     <div className="mt-2 flex items-center gap-3">
@@ -1303,9 +1303,9 @@ export function StackDetailPage() {
 
                       {/* Split Diff View */}
                       {file.patch && expandedFiles?.has(file.filename) && (
-                        <div className="flex">
+                        <div className="flex overflow-x-auto">
                           {/* Left Side - Original */}
-                          <div className={`flex-1 border-r ${theme.border} ${theme.bgPrimary}`}>
+                          <div className={`w-1/2 min-w-[600px] border-r ${theme.border} ${theme.bgPrimary} flex-shrink-0`}>
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Original</span>
                             </div>
@@ -1330,13 +1330,10 @@ export function StackDetailPage() {
                                   line.lineNum <= Math.max(selectingLines.startLine, selectingLines.currentLine);
 
                                 // Find existing comments for this line
-                                // For the left side (old code), only show comments if the corresponding right line is empty
-                                // This prevents showing comments on both sides for modified lines
-                                const rightLine = rightLines[index];
-                                const shouldShowComments = rightLine?.type === 'empty' || line.type === 'context';
-                                const lineComments = shouldShowComments ? inlineComments.filter(
-                                  (c) => c.path === file.filename && c.line === line.lineNum
-                                ) : [];
+                                // For the left side, only show comments with side === 'LEFT'
+                                const lineComments = inlineComments.filter(
+                                  (c) => c.path === file.filename && c.line === line.lineNum && c.side === 'LEFT'
+                                );
 
                                 return (
                                   <div key={index}>
@@ -1377,7 +1374,7 @@ export function StackDetailPage() {
                                           const isThreadParent = !!thread;
 
                                           return (
-                                          <div key={comment.id} className={`border-l-2 ${thread && thread.resolved ? 'border-everforest-green' : 'border-everforest-blue'} pl-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
+                                          <div key={comment.id} className={`border-2 ${thread && thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg p-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
                                             <div className="flex items-start gap-2">
                                               <img
                                                 src={comment.user.avatar_url}
@@ -1394,7 +1391,7 @@ export function StackDetailPage() {
                                                   </span>
                                                   {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
                                                 </div>
-                                                <div className={`mt-1 text-xs ${theme.textSecondary} whitespace-pre-wrap`}>
+                                                <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
                                                   {comment.body}
                                                 </div>
                                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
@@ -1538,7 +1535,7 @@ export function StackDetailPage() {
                           </div>
 
                           {/* Right Side - Modified */}
-                          <div className={`flex-1 ${theme.bgPrimary}`}>
+                          <div className={`w-1/2 min-w-[600px] ${theme.bgPrimary} flex-shrink-0`}>
                             <div className={`px-3 py-2 border-b ${theme.border} ${theme.bgTertiary}`}>
                               <span className={`text-xs font-medium ${theme.textSecondary}`}>Modified</span>
                             </div>
@@ -1563,8 +1560,9 @@ export function StackDetailPage() {
                                   line.lineNum <= Math.max(selectingLines.startLine, selectingLines.currentLine);
 
                                 // Find existing comments for this line
+                                // For the right side, only show comments with side === 'RIGHT'
                                 const lineComments = inlineComments.filter(
-                                  (c) => c.path === file.filename && c.line === line.lineNum
+                                  (c) => c.path === file.filename && c.line === line.lineNum && c.side === 'RIGHT'
                                 );
 
                                 return (
@@ -1606,7 +1604,7 @@ export function StackDetailPage() {
                                           const isThreadParent = !!thread;
 
                                           return (
-                                          <div key={comment.id} className={`border-l-2 ${thread && thread.resolved ? 'border-everforest-green' : 'border-everforest-blue'} pl-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
+                                          <div key={comment.id} className={`border-2 ${thread && thread.resolved ? 'border-everforest-green/40' : 'border-everforest-aqua/40'} bg-everforest-bg2 rounded-lg p-3 ${thread && thread.resolved ? 'opacity-75' : ''}`}>
                                             <div className="flex items-start gap-2">
                                               <img
                                                 src={comment.user.avatar_url}
@@ -1623,7 +1621,7 @@ export function StackDetailPage() {
                                                   </span>
                                                   {isThreadParent && <ThreadStatusBadge resolved={thread.resolved} />}
                                                 </div>
-                                                <div className={`mt-1 text-xs ${theme.textSecondary} whitespace-pre-wrap`}>
+                                                <div className={`mt-1 text-sm ${theme.textPrimary} whitespace-pre-wrap`}>
                                                   {comment.body}
                                                 </div>
                                                 <div className="mt-1 flex items-center gap-2 flex-wrap">

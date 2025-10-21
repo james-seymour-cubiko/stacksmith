@@ -132,6 +132,7 @@ export class GithubService {
       html_url: comment.html_url,
       path: comment.path,
       line: comment.line || undefined,
+      side: comment.side as 'LEFT' | 'RIGHT' | undefined,
       commit_id: comment.commit_id,
       in_reply_to_id: comment.in_reply_to_id || undefined,
     }));

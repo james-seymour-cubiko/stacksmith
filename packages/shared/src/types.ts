@@ -85,6 +85,7 @@ export interface GithubComment {
   html_url: string;
   path?: string;
   line?: number;
+  side?: 'LEFT' | 'RIGHT';  // Which side of the diff the comment is on
   commit_id?: string;
   in_reply_to_id?: number;  // Parent comment ID for replies
   conversation_id?: string;   // GitHub's conversation/thread ID (from GraphQL)
