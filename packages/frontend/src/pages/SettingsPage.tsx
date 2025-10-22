@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import { configAPI } from '../lib/api';
 import { theme } from '../lib/theme';
 
@@ -15,14 +15,21 @@ export function SettingsPage() {
   const [repo, setRepo] = useState('');
   const [token, setToken] = useState('');
   const [currentUser, setCurrentUser] = useState('');
-  const [selectedRepo, setSelectedRepo] = useState<{ owner: string; repo: string } | null>(null);
 
-  // Rate limit query - only runs when selectedRepo is set
-  const { data: rateLimit, isLoading: isLoadingRateLimit, refetch: refetchRateLimit } = useQuery({
-    queryKey: ['rateLimit', selectedRepo?.owner, selectedRepo?.repo],
-    queryFn: () => configAPI.getRateLimit(selectedRepo!.owner, selectedRepo!.repo),
-    enabled: !!selectedRepo,
+  // Fetch rate limits for all configured repositories
+  const rateLimitQueries = useQueries({
+    queries: (config?.repos || []).map((repo) => ({
+      queryKey: ['rateLimit', repo.owner, repo.repo],
+      queryFn: () => configAPI.getRateLimit(repo.owner, repo.repo),
+      retry: false,
+    })),
   });
+
+  const isLoadingRateLimits = rateLimitQueries.some((q) => q.isLoading);
+
+  const refetchAllRateLimits = () => {
+    rateLimitQueries.forEach((query) => query.refetch());
+  };
 
   const configureMutation = useMutation({
     mutationFn: configAPI.configureGithub,
@@ -180,136 +187,134 @@ export function SettingsPage() {
       {/* Rate Limit Section */}
       {config && config.repos && config.repos.length > 0 && (
         <div className={`mt-8 ${theme.card}`}>
-          <div className={`px-6 py-5 border-b ${theme.border}`}>
-            <h2 className={`text-lg font-medium ${theme.textPrimary}`}>API Rate Limit</h2>
-            <p className={`mt-1 text-sm ${theme.textSecondary}`}>
-              View your current GitHub API rate limit usage.
-            </p>
+          <div className={`px-6 py-5 border-b ${theme.border} flex justify-between items-center`}>
+            <div>
+              <h2 className={`text-lg font-medium ${theme.textPrimary}`}>API Rate Limit</h2>
+              <p className={`mt-1 text-sm ${theme.textSecondary}`}>
+                Current GitHub API rate limit usage for all configured repositories.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={refetchAllRateLimits}
+              disabled={isLoadingRateLimits}
+              className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${theme.buttonSecondary}`}
+            >
+              {isLoadingRateLimits ? 'Refreshing...' : 'Refresh All'}
+            </button>
           </div>
 
-          <div className="px-6 py-5 space-y-4">
-            <div>
-              <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
-                Select Repository
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={selectedRepo ? `${selectedRepo.owner}/${selectedRepo.repo}` : ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const [owner, repo] = e.target.value.split('/');
-                      setSelectedRepo({ owner, repo });
-                    } else {
-                      setSelectedRepo(null);
-                    }
-                  }}
-                  className={`block w-full rounded-md shadow-sm sm:text-sm px-3 py-2 border ${theme.input}`}
-                >
-                  <option value="">Select a repository...</option>
-                  {config.repos.map((repo, index) => (
-                    <option key={index} value={`${repo.owner}/${repo.repo}`}>
-                      {repo.owner}/{repo.repo}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => refetchRateLimit()}
-                  disabled={!selectedRepo || isLoadingRateLimit}
-                  className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${theme.buttonSecondary}`}
-                >
-                  {isLoadingRateLimit ? 'Loading...' : 'Check Usage'}
-                </button>
-              </div>
-            </div>
+          <div className="px-6 py-5 space-y-6">
+            {config.repos.map((repo, index) => {
+              const queryResult = rateLimitQueries[index];
+              const rateLimit = queryResult?.data;
 
-            {rateLimit && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {/* REST API Rate Limit */}
-                <div className={`${theme.bgSecondary} rounded-lg p-4 border ${theme.border}`}>
-                  <h3 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>REST API</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Used:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.used}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Remaining:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.remaining}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Limit:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.limit}</span>
-                    </div>
-                    <div className="pt-2 border-t border-gray-700">
-                      <div className="flex justify-between">
-                        <span className={`text-sm ${theme.textSecondary}`}>Resets at:</span>
-                        <span className={`text-sm font-medium ${theme.textPrimary}`}>
-                          {new Date(rateLimit.rest.resetAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="pt-2">
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            (rateLimit.rest.remaining / rateLimit.rest.limit) > 0.5
-                              ? 'bg-green-600'
-                              : (rateLimit.rest.remaining / rateLimit.rest.limit) > 0.2
-                              ? 'bg-yellow-600'
-                              : 'bg-red-600'
-                          }`}
-                          style={{ width: `${(rateLimit.rest.remaining / rateLimit.rest.limit) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              return (
+                <div key={index} className={`${theme.bgSecondary} rounded-lg p-4 border ${theme.border}`}>
+                  <h3 className={`text-base font-medium ${theme.textPrimary} mb-4`}>
+                    {repo.owner}/{repo.repo}
+                  </h3>
 
-                {/* GraphQL API Rate Limit */}
-                <div className={`${theme.bgSecondary} rounded-lg p-4 border ${theme.border}`}>
-                  <h3 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>GraphQL API</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Used:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.used}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Remaining:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.remaining}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={`text-sm ${theme.textSecondary}`}>Limit:</span>
-                      <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.limit}</span>
-                    </div>
-                    <div className="pt-2 border-t border-gray-700">
-                      <div className="flex justify-between">
-                        <span className={`text-sm ${theme.textSecondary}`}>Resets at:</span>
-                        <span className={`text-sm font-medium ${theme.textPrimary}`}>
-                          {new Date(rateLimit.graphql.resetAt).toLocaleTimeString()}
-                        </span>
+                  {queryResult?.isLoading && (
+                    <p className={`text-sm ${theme.textSecondary}`}>Loading rate limit...</p>
+                  )}
+
+                  {queryResult?.isError && (
+                    <p className={`text-sm text-red-500`}>
+                      Error loading rate limit: {(queryResult.error as Error).message}
+                    </p>
+                  )}
+
+                  {rateLimit && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* REST API Rate Limit */}
+                      <div className={`${theme.bgTertiary} rounded-lg p-4 border ${theme.border}`}>
+                        <h4 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>REST API</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Used:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.used}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Remaining:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.remaining}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Limit:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.rest.limit}</span>
+                          </div>
+                          <div className="pt-2 border-t border-gray-700">
+                            <div className="flex justify-between">
+                              <span className={`text-sm ${theme.textSecondary}`}>Resets at:</span>
+                              <span className={`text-sm font-medium ${theme.textPrimary}`}>
+                                {new Date(rateLimit.rest.resetAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="pt-2">
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  (rateLimit.rest.remaining / rateLimit.rest.limit) > 0.5
+                                    ? 'bg-green-600'
+                                    : (rateLimit.rest.remaining / rateLimit.rest.limit) > 0.2
+                                    ? 'bg-yellow-600'
+                                    : 'bg-red-600'
+                                }`}
+                                style={{ width: `${(rateLimit.rest.remaining / rateLimit.rest.limit) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* GraphQL API Rate Limit */}
+                      <div className={`${theme.bgTertiary} rounded-lg p-4 border ${theme.border}`}>
+                        <h4 className={`text-sm font-medium ${theme.textPrimary} mb-3`}>GraphQL API</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Used:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.used}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Remaining:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.remaining}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className={`text-sm ${theme.textSecondary}`}>Limit:</span>
+                            <span className={`text-sm font-medium ${theme.textPrimary}`}>{rateLimit.graphql.limit}</span>
+                          </div>
+                          <div className="pt-2 border-t border-gray-700">
+                            <div className="flex justify-between">
+                              <span className={`text-sm ${theme.textSecondary}`}>Resets at:</span>
+                              <span className={`text-sm font-medium ${theme.textPrimary}`}>
+                                {new Date(rateLimit.graphql.resetAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="pt-2">
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  (rateLimit.graphql.remaining / rateLimit.graphql.limit) > 0.5
+                                    ? 'bg-green-600'
+                                    : (rateLimit.graphql.remaining / rateLimit.graphql.limit) > 0.2
+                                    ? 'bg-yellow-600'
+                                    : 'bg-red-600'
+                                }`}
+                                style={{ width: `${(rateLimit.graphql.remaining / rateLimit.graphql.limit) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    {/* Progress bar */}
-                    <div className="pt-2">
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            (rateLimit.graphql.remaining / rateLimit.graphql.limit) > 0.5
-                              ? 'bg-green-600'
-                              : (rateLimit.graphql.remaining / rateLimit.graphql.limit) > 0.2
-                              ? 'bg-yellow-600'
-                              : 'bg-red-600'
-                          }`}
-                          style={{ width: `${(rateLimit.graphql.remaining / rateLimit.graphql.limit) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         </div>
       )}
