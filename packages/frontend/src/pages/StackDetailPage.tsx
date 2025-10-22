@@ -266,6 +266,7 @@ export function StackDetailPage() {
 
   // Track copy to clipboard state
   const [isCopied, setIsCopied] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Track comments section collapse state
   const [isCommentsExpanded, setIsCommentsExpanded] = useState(false);
@@ -691,11 +692,27 @@ export function StackDetailPage() {
     }
   };
 
-  if (isLoading) {
+  // Handle refresh stack data
+  const handleRefresh = async () => {
+    if (!owner || !repo || !stackId) return;
+
+    setIsRefreshing(true);
+
+    // Invalidate and refetch all queries related to this stack and its PRs
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['stacks', owner, repo, stackId], refetchType: 'active' }),
+      queryClient.invalidateQueries({ queryKey: ['prs', owner, repo], refetchType: 'active' }),
+      queryClient.invalidateQueries({ queryKey: ['collaborators', owner, repo], refetchType: 'active' }),
+    ]);
+
+    setIsRefreshing(false);
+  };
+
+  if (isLoading || isRefreshing) {
     return (
       <div className="text-center py-12">
         <div className={`inline-block animate-spin rounded-full h-8 w-8 border-b-2 ${theme.spinner}`}></div>
-        <p className={`mt-2 text-sm ${theme.textSecondary}`}>Loading stack...</p>
+        <p className={`mt-2 text-sm ${theme.textSecondary}`}>{isRefreshing ? 'Refreshing stack...' : 'Loading stack...'}</p>
       </div>
     );
   }
@@ -937,6 +954,8 @@ export function StackDetailPage() {
               stack={stack}
               isCopied={isCopied}
               onShareStack={handleShareStack}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
               sortedPRs={sortedPRs}
               currentPRNumber={currentPRNumber}
               onSelectPR={setSelectedPRNumber}
