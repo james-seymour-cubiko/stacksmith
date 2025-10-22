@@ -189,7 +189,7 @@ export const configAPI = {
       body: JSON.stringify(data),
     }),
 
-  getRateLimit: (owner: string, repo: string) =>
+  getRateLimit: () =>
     fetchAPI<{
       rest: {
         limit: number;
@@ -204,5 +204,5 @@ export const configAPI = {
         resetAt: string;
         used: number;
       };
-    }>(`/config/github/rate-limit?owner=${owner}&repo=${repo}`),
+    }>(`/config/github/rate-limit`),
 };

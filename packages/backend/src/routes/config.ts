@@ -56,16 +56,10 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
       schema: {
         description: 'Get GitHub API rate limit information',
         tags: ['config'],
-        querystring: z.object({
-          owner: z.string(),
-          repo: z.string(),
-        }),
       },
     },
-    async (request, reply) => {
+    async (_request, reply) => {
       try {
-        const { owner, repo } = request.query;
-
         if (!githubServiceManager.isConfigured()) {
           return reply.code(503).send({
             error: 'Service Unavailable',
@@ -74,7 +68,8 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
           });
         }
 
-        const service = githubServiceManager.getService(owner, repo);
+        // Rate limits are shared across all repositories, so we can use any configured service
+        const service = githubServiceManager.getAnyService();
         const rateLimit = await service.getRateLimit();
         return rateLimit;
       } catch (error: any) {

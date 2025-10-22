@@ -50,6 +50,20 @@ export class GithubServiceManager {
   }
 
   /**
+   * Get any configured GithubService instance
+   * Useful for operations that don't depend on a specific repo (e.g., rate limits)
+   */
+  getAnyService(): GithubService {
+    const firstService = this.services.values().next().value;
+
+    if (!firstService) {
+      throw new Error('No GitHub services configured. Please configure at least one repository first.');
+    }
+
+    return firstService;
+  }
+
+  /**
    * Get all configured GithubService instances
    */
   getAllServices(): Array<{ owner: string; repo: string; service: GithubService }> {
