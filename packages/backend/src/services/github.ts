@@ -947,6 +947,48 @@ export class GithubService {
       throw new Error(`Failed to fetch collaborators: ${error.message}`);
     }
   }
+
+  async getRateLimit() {
+    this.ensureConfigured();
+
+    try {
+      // Get REST API rate limit
+      const { data: restRateLimit } = await this.octokit!.rateLimit.get();
+
+      // Get GraphQL rate limit using GraphQL query
+      const graphqlQuery = `
+        query {
+          rateLimit {
+            limit
+            remaining
+            resetAt
+            used
+          }
+        }
+      `;
+
+      const graphqlRateLimit: any = await this.octokit!.graphql(graphqlQuery);
+
+      return {
+        rest: {
+          limit: restRateLimit.rate.limit,
+          remaining: restRateLimit.rate.remaining,
+          reset: restRateLimit.rate.reset,
+          used: restRateLimit.rate.used,
+          resetAt: new Date(restRateLimit.rate.reset * 1000).toISOString(),
+        },
+        graphql: {
+          limit: graphqlRateLimit.rateLimit.limit,
+          remaining: graphqlRateLimit.rateLimit.remaining,
+          resetAt: graphqlRateLimit.rateLimit.resetAt,
+          used: graphqlRateLimit.rateLimit.used,
+        },
+      };
+    } catch (error: any) {
+      console.error('Error fetching rate limit:', error);
+      throw new Error(`Failed to fetch rate limit: ${error.message}`);
+    }
+  }
 }
 
 // Singleton instance

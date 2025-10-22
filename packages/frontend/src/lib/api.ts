@@ -188,4 +188,21 @@ export const configAPI = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  getRateLimit: (owner: string, repo: string) =>
+    fetchAPI<{
+      rest: {
+        limit: number;
+        remaining: number;
+        reset: number;
+        used: number;
+        resetAt: string;
+      };
+      graphql: {
+        limit: number;
+        remaining: number;
+        resetAt: string;
+        used: number;
+      };
+    }>(`/config/github/rate-limit?owner=${owner}&repo=${repo}`),
 };

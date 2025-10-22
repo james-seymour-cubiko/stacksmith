@@ -48,4 +48,42 @@ export const configRoutes: FastifyPluginAsync = async (server) => {
       return { success: true };
     }
   );
+
+  // Get GitHub API rate limit
+  typedServer.get(
+    '/github/rate-limit',
+    {
+      schema: {
+        description: 'Get GitHub API rate limit information',
+        tags: ['config'],
+        querystring: z.object({
+          owner: z.string(),
+          repo: z.string(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { owner, repo } = request.query;
+
+        if (!githubServiceManager.isConfigured()) {
+          return reply.code(503).send({
+            error: 'Service Unavailable',
+            message: 'GitHub service not configured',
+            statusCode: 503,
+          });
+        }
+
+        const service = githubServiceManager.getService(owner, repo);
+        const rateLimit = await service.getRateLimit();
+        return rateLimit;
+      } catch (error: any) {
+        return reply.code(500).send({
+          error: 'Internal Server Error',
+          message: error.message,
+          statusCode: 500,
+        });
+      }
+    }
+  );
 };
