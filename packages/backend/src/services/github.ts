@@ -313,10 +313,12 @@ export class GithubService {
     });
 
     // Get check runs for that SHA (each check run has a check_suite.id)
+    // filter: 'latest' returns only the most recent check runs by completed_at timestamp
     const { data: checkRunsData } = await this.octokit!.checks.listForRef({
       owner: this.owner,
       repo: this.repo,
       ref: pr.head.sha,
+      filter: 'latest',
     });
 
     // Get workflow runs for that SHA (each workflow run has check_suite_id and name)
@@ -361,80 +363,51 @@ export class GithubService {
         };
       });
 
-    return checkRunsWithWorkflowNames;
+    // Deduplicate by name, keeping only the latest check run for each job
+    // When a job is rerun, GitHub creates a new check run with a higher ID
+    // The filter: 'latest' parameter doesn't fully deduplicate when jobs are rerun
+    // because in-progress reruns don't have a completed_at timestamp yet
+    const latestCheckRuns = new Map<string, typeof checkRunsWithWorkflowNames[0]>();
+    for (const checkRun of checkRunsWithWorkflowNames) {
+      const existing = latestCheckRuns.get(checkRun.name);
+      if (!existing || checkRun.id > existing.id) {
+        latestCheckRuns.set(checkRun.name, checkRun);
+      }
+    }
+
+    return Array.from(latestCheckRuns.values());
   }
 
   async rerunCheckRun(checkRunId: number): Promise<void> {
     this.ensureConfigured();
 
     try {
-      // First, try to get the check run to find its associated workflow run
-      const { data: checkRun } = await this.octokit!.checks.get({
+      // For GitHub Actions, check run IDs and job IDs are the same
+      // Use reRunJobForWorkflowRun to rerun just this specific job
+      await this.octokit!.actions.reRunJobForWorkflowRun({
         owner: this.owner,
         repo: this.repo,
-        check_run_id: checkRunId,
-      });
-
-      // If this check run has a check suite, try to find the workflow run
-      if (checkRun.check_suite) {
-        // List all workflow runs for the check suite's head SHA
-        const { data: workflowRuns } = await this.octokit!.actions.listWorkflowRunsForRepo({
-          owner: this.owner,
-          repo: this.repo,
-          head_sha: checkRun.head_sha,
-          per_page: 100,
-        });
-
-        // Find the specific workflow run that contains this check by matching job names
-        for (const run of workflowRuns.workflow_runs) {
-          if (run.status !== 'completed') continue;
-
-          // Get jobs for this workflow run
-          const { data: jobs } = await this.octokit!.actions.listJobsForWorkflowRun({
-            owner: this.owner,
-            repo: this.repo,
-            run_id: run.id,
-          });
-
-          // Check if this workflow run has a job with the same name as our check
-          const matchingJob = jobs.jobs.find((job) => job.name === checkRun.name);
-
-          if (matchingJob) {
-            // Found the workflow that contains this specific check
-            // Rerun only this workflow (not all workflows)
-            await this.octokit!.actions.reRunWorkflow({
-              owner: this.owner,
-              repo: this.repo,
-              run_id: run.id,
-            });
-            return;
-          }
-        }
-
-        // If we didn't find a matching workflow, just rerun the first completed one
-        const firstCompleted = workflowRuns.workflow_runs.find((run) => run.status === 'completed');
-        if (firstCompleted) {
-          await this.octokit!.actions.reRunWorkflow({
-            owner: this.owner,
-            repo: this.repo,
-            run_id: firstCompleted.id,
-          });
-          return;
-        }
-      }
-
-      // Fallback: Try the checks API rerequestRun (for non-Actions checks)
-      await this.octokit!.checks.rerequestRun({
-        owner: this.owner,
-        repo: this.repo,
-        check_run_id: checkRunId,
+        job_id: checkRunId,
       });
     } catch (error: any) {
+      // If the Actions API fails, try the Checks API (for non-Actions checks)
+      if (error.status === 404 || error.status === 422) {
+        try {
+          await this.octokit!.checks.rerequestRun({
+            owner: this.owner,
+            repo: this.repo,
+            check_run_id: checkRunId,
+          });
+          return;
+        } catch (checksError: any) {
+          if (checksError.status === 403) {
+            throw new Error('You do not have permission to rerun this check. Make sure your token has the necessary permissions.');
+          }
+          throw checksError;
+        }
+      }
       if (error.status === 403) {
         throw new Error('You do not have permission to rerun this check. Make sure your token has the necessary permissions.');
-      }
-      if (error.status === 404) {
-        throw new Error('Check run or workflow not found.');
       }
       throw error;
     }

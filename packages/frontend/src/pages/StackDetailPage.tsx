@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStack } from '../hooks/useStacks';
-import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useClosePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread, useCollaborators } from '../hooks/usePRs';
+import { usePR, usePRDiff, usePRCommits, useCreatePRComment, usePRComments, usePRReviews, usePRIssueComments, useCreatePRIssueComment, useMergePR, usePRCheckRuns, useRerunAllChecks, useRerunCheckRun, useDeleteComment, useDeleteIssueComment, useReplyToComment, useApprovePR, useClosePR, useRequestReviewers, usePRThreads, useResolveThread, useUnresolveThread, useCollaborators } from '../hooks/usePRs';
 import { theme } from '../lib/theme';
 import { StackHeader } from '../components/StackHeader';
 import { CIStatusPanel } from '../components/CIStatusPanel';
@@ -235,6 +235,7 @@ export function StackDetailPage() {
 
   // CI check rerun mutation
   const rerunAllChecks = useRerunAllChecks(owner || '', repo || '', currentPRNumber || 0);
+  const rerunCheckRun = useRerunCheckRun(owner || '', repo || '', currentPRNumber || 0);
 
   // Approve PR mutation
   const approvePR = useApprovePR(owner || '', repo || '', currentPRNumber || 0);
@@ -957,6 +958,8 @@ export function StackDetailPage() {
                 checkRunsLoading={checkRunsLoading}
                 onRerunAll={() => rerunAllChecks.mutate()}
                 rerunPending={rerunAllChecks.isPending}
+                onRerunJob={(checkRunId) => rerunCheckRun.mutate(checkRunId)}
+                rerunningJobId={rerunCheckRun.isPending && rerunCheckRun.variables ? rerunCheckRun.variables : null}
               />
               <ReviewStatusPanel
                 selectedPR={selectedPR}

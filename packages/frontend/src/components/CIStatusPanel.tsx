@@ -6,9 +6,11 @@ interface CIStatusPanelProps {
   checkRunsLoading: boolean;
   onRerunAll: () => void;
   rerunPending: boolean;
+  onRerunJob: (checkRunId: number) => void;
+  rerunningJobId: number | null;
 }
 
-export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPending }: CIStatusPanelProps) {
+export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPending, onRerunJob, rerunningJobId }: CIStatusPanelProps) {
   return (
     <div className={`w-80 flex-shrink-0 ${theme.card} self-stretch`}>
       <div className={`px-4 py-3 ${theme.border}`}>
@@ -91,6 +93,9 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
                 statusIcon = '○';
               }
 
+              const isFailedJob = check.conclusion === 'failure' || check.conclusion === 'timed_out' || check.conclusion === 'action_required';
+              const isRerunning = rerunningJobId === check.id;
+
               return (
                 <div
                   key={check.id}
@@ -104,16 +109,28 @@ export function CIStatusPanel({ checkRuns, checkRunsLoading, onRerunAll, rerunPe
                       <div className={`text-xs font-medium ${theme.textPrimary} truncate`} title={check.name}>
                         {check.name}
                       </div>
-                      {(check.html_url || check.details_url) && (
-                        <a
-                          href={check.html_url || check.details_url || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`text-xs ${theme.textLink} mt-1 inline-block`}
-                        >
-                          Details →
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        {(check.html_url || check.details_url) && (
+                          <a
+                            href={check.html_url || check.details_url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`text-xs ${theme.textLink}`}
+                          >
+                            Details →
+                          </a>
+                        )}
+                        {isFailedJob && (
+                          <button
+                            onClick={() => onRerunJob(check.id)}
+                            disabled={isRerunning}
+                            className={`text-xs px-1 py-0.5 rounded ${theme.textMuted} hover:${theme.textPrimary} disabled:${theme.textMuted} disabled:cursor-not-allowed transition-colors`}
+                            title="Rerun this job"
+                          >
+                            ⟳
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
