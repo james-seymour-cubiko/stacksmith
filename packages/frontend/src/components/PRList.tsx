@@ -30,6 +30,7 @@ function useCIStatus(owner: string, repo: string, prNumber: number) {
   // Use useQuery to subscribe to changes instead of just reading from cache
   const { data: checkRuns, isLoading } = useQuery({
     queryKey: ['prs', owner, repo, prNumber, 'checks'],
+    queryFn: () => { throw new Error('This query should not fetch'); }, // Required by React Query even when enabled: false
     enabled: false, // Don't fetch, just subscribe to cache updates
     initialData: () => queryClient.getQueryData<GithubCheckRun[]>(['prs', owner, repo, prNumber, 'checks']),
   });

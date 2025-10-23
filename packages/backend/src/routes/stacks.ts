@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { writeFile, readFile } from "node:fs/promises";
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { githubServiceManager } from '../services/github-manager.js';
 import { inferStacksFromPRs, getStackById } from '../services/stack-inference.js';
 import type { StackWithPRs } from '@review-app/shared';
+import {stackService, StackService} from '../services/stacks.js';
 
 export const stackRoutes: FastifyPluginAsync = async (server) => {
   const typedServer = server.withTypeProvider<ZodTypeProvider>();
@@ -39,12 +41,15 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
         ? services.filter(({ owner, repo: repoName }) => `${owner}/${repoName}` === repo)
         : services;
 
+      const knownStacks = await stackService.loadStacks();
       // Fetch stacks from all (or filtered) repos
       for (const { owner, repo: repoName, service } of servicesToQuery) {
         const prs = await service.listPRs('open', { per_page: 100 });
-        const stacks = inferStacksFromPRs(prs, owner, repoName);
+        const stacks = inferStacksFromPRs(prs, knownStacks, owner, repoName);
         allStacks.push(...stacks);
       }
+
+      await stackService.saveStacks(allStacks);
 
       // Sort by most recently updated
       allStacks.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
@@ -93,12 +98,9 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
         });
       }
 
-      // Get all open PRs and infer stacks for this repo
-      const allPRs = await service.listPRs('open', { per_page: 100 });
-      const stacksWithPRs = inferStacksFromPRs(allPRs, owner, repo);
-
-      // Find the requested stack
-      const stack = getStackById(stacksWithPRs, stackId);
+      // Load known stacks and find the requested stack
+      const knownStacks = await stackService.loadStacks();
+      const stack = getStackById(knownStacks, stackId);
 
       if (!stack) {
         return reply.code(404).send({
@@ -108,7 +110,42 @@ export const stackRoutes: FastifyPluginAsync = async (server) => {
         });
       }
 
-      return stack;
+      // Query each PR individually from GitHub to get updated status (including merged PRs)
+      const updatedPRs = await Promise.all(
+        stack.prs.map(async (pr) => {
+          try {
+            const freshPR = await service.getPR(pr.number);
+            // Preserve stack metadata while updating PR data
+            return {
+              ...freshPR,
+              stackOrder: pr.stackOrder,
+              stackId: pr.stackId,
+              stackName: pr.stackName,
+              repoOwner: pr.repoOwner,
+              repoName: pr.repoName,
+            };
+          } catch (error) {
+            // If PR fetch fails (e.g., deleted), keep the existing PR data
+            console.warn(`Failed to fetch PR #${pr.number}:`, error);
+            return pr;
+          }
+        })
+      );
+
+      // Update the stack with fresh PR data
+      const updatedStack: StackWithPRs = {
+        ...stack,
+        prs: updatedPRs,
+        updated_at: new Date(Math.max(...updatedPRs.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
+      };
+
+      // Save the updated stack back to stacks.json
+      const allStacks = knownStacks.map((s) =>
+        s.id === stackId ? updatedStack : s
+      );
+      await stackService.saveStacks(allStacks);
+
+      return updatedStack;
     }
   );
 

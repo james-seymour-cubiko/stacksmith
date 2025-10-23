@@ -169,17 +169,6 @@ export function StackDetailPage() {
     }
   }, [sortedPRs, owner, repo, queryClient]);
 
-  // Redirect to stacks page if base PR is already merged
-  useEffect(() => {
-    if (stack && sortedPRs.length > 0) {
-      const basePR = sortedPRs[0];
-      if (basePR.merged_at) {
-        // Base branch has been merged, stack ID is now invalid
-        navigate('/stacks');
-      }
-    }
-  }, [stack, sortedPRs, navigate]);
-
   // Set default selected PR when stack loads
   const currentPRNumber = selectedPRNumber ?? sortedPRs[0]?.number;
 

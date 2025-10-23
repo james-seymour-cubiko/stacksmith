@@ -8,16 +8,28 @@ import type { GithubPR, Stack, StackWithPRs, StackedPR } from '@review-app/share
  * @param repoOwner Repository owner
  * @param repoName Repository name
  */
-export function inferStacksFromPRs(allPRs: GithubPR[], repoOwner: string, repoName: string): StackWithPRs[] {
+export function inferStacksFromPRs(allPRs: GithubPR[], knownStacks: StackWithPRs[], repoOwner: string, repoName: string): StackWithPRs[] {
   // Build a map of branch name to PR for quick lookup
   const branchToPR = new Map<string, GithubPR>();
   for (const pr of allPRs) {
     branchToPR.set(pr.head.ref, pr);
   }
 
+  // Build a map of PR number to known stack for this repo
+  const prNumberToKnownStack = new Map<number, StackWithPRs>();
+  for (const stack of knownStacks) {
+    // Only consider stacks from the same repo
+    if (stack.repoOwner === repoOwner && stack.repoName === repoName) {
+      for (const pr of stack.prs) {
+        prNumberToKnownStack.set(pr.number, stack);
+      }
+    }
+  }
+
   // Find all PR chains (stacks)
   const visited = new Set<number>();
-  const stacks: StackWithPRs[] = [];
+  const newStacks: StackWithPRs[] = [];
+  const updatedKnownStackIds = new Set<string>();
 
   for (const pr of allPRs) {
     if (visited.has(pr.number)) continue;
@@ -50,33 +62,82 @@ export function inferStacksFromPRs(allPRs: GithubPR[], repoOwner: string, repoNa
       lastPR = child;
     }
 
-    // Create a stack for all PRs (including single PRs)
-    const stackId = generateStackId(chain, repoOwner, repoName);
-    const stackName = generateStackName(chain);
+    // Check if any PR in this chain exists in a known stack
+    const knownStack = chain
+      .map((chainPR) => prNumberToKnownStack.get(chainPR.number))
+      .find((stack) => stack !== undefined);
 
-    // Convert to StackedPRs with order information
-    const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
-      ...pr,
-      stackOrder: index,
-      stackId,
-      stackName,
-      repoOwner,
-      repoName,
-    }));
+    if (knownStack) {
+      // Upsert this chain into the known stack
+      const stackId = knownStack.id;
+      const stackName = knownStack.name;
 
-    stacks.push({
-      id: stackId,
-      name: stackName,
-      description: chain.length > 1
-        ? `Stack from ${chain[0].base.ref} with ${chain.length} PRs`
-        : `Single PR: ${chain[0].title}`,
-      created_at: chain[0].created_at,
-      // Find updated at of all PRs in the stack
-      updated_at: new Date(Math.max(...chain.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
-      repoOwner,
-      repoName,
-      prs: stackedPRs,
-    });
+      // Convert to StackedPRs with order information
+      const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
+        ...pr,
+        stackOrder: index,
+        stackId,
+        stackName,
+        repoOwner,
+        repoName,
+      }));
+
+      // Update the known stack with the latest data from open PRs
+      const updatedStack: StackWithPRs = {
+        ...knownStack,
+        description: chain.length > 1
+          ? `Stack from ${chain[0].base.ref} with ${chain.length} PRs`
+          : `Single PR: ${chain[0].title}`,
+        updated_at: new Date(Math.max(...chain.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
+        prs: stackedPRs,
+      };
+
+      // Replace the known stack in our result
+      const indexInNewStacks = newStacks.findIndex((s) => s.id === stackId);
+      if (indexInNewStacks >= 0) {
+        newStacks[indexInNewStacks] = updatedStack;
+      } else {
+        newStacks.push(updatedStack);
+        updatedKnownStackIds.add(stackId);
+      }
+    } else {
+      // Create a new stack for PRs that don't belong to any known stack
+      const stackId = generateStackId(chain, repoOwner, repoName);
+      const stackName = generateStackName(chain);
+
+      // Convert to StackedPRs with order information
+      const stackedPRs: StackedPR[] = chain.map((pr, index) => ({
+        ...pr,
+        stackOrder: index,
+        stackId,
+        stackName,
+        repoOwner,
+        repoName,
+      }));
+
+      newStacks.push({
+        id: stackId,
+        name: stackName,
+        description: chain.length > 1
+          ? `Stack from ${chain[0].base.ref} with ${chain.length} PRs`
+          : `Single PR: ${chain[0].title}`,
+        created_at: chain[0].created_at,
+        updated_at: new Date(Math.max(...chain.map((p) => new Date(p.updated_at).getTime()))).toISOString(),
+        repoOwner,
+        repoName,
+        prs: stackedPRs,
+      });
+    }
+  }
+
+  // Include known stacks from this repo that weren't updated (all PRs might be closed)
+  const stacks = [...newStacks];
+  for (const knownStack of knownStacks) {
+    if (knownStack.repoOwner === repoOwner && knownStack.repoName === repoName) {
+      if (!updatedKnownStackIds.has(knownStack.id)) {
+        stacks.push(knownStack);
+      }
+    }
   }
 
   return stacks;
