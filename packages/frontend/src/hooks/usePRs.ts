@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { prsAPI } from '../lib/api';
-import { GithubReview, CommentThread, ThreadResolutionInfo } from '@review-app/shared';
+import { GithubReview, CommentThread, ThreadResolutionInfo, GithubCheckRun } from '@review-app/shared';
 
 export function usePRs(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open') {
   return useQuery({
@@ -89,7 +89,7 @@ export function usePRCommits(owner: string | undefined, repo: string | undefined
   });
 }
 
-export function usePRCheckRuns(owner: string | undefined, repo: string | undefined, prNumber: number | undefined, options?: { refetchInterval?: number | false }) {
+export function usePRCheckRuns(owner: string | undefined, repo: string | undefined, prNumber: number | undefined, options?: { refetchInterval?: number | false | ((data: GithubCheckRun[] | undefined) => number | false) }) {
   return useQuery({
     queryKey: ['prs', owner, repo, prNumber, 'checks'],
     queryFn: () => prsAPI.getCheckRuns(owner!, repo!, prNumber!),

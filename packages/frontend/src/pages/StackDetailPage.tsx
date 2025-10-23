@@ -198,7 +198,22 @@ export function StackDetailPage() {
   const { data: issueComments } = usePRIssueComments(owner, repo, currentPRNumber);
 
   // Fetch check runs for selected PR
-  const { data: checkRuns, isLoading: checkRunsLoading } = usePRCheckRuns(owner, repo, currentPRNumber);
+  const { data: checkRuns, isLoading: checkRunsLoading, refetch: refetchCheckRuns } = usePRCheckRuns(owner, repo, currentPRNumber);
+
+  // Poll every 15 seconds if there are any pending checks
+  useEffect(() => {
+    const hasPendingChecks = checkRuns?.some(check =>
+      check.status === 'in_progress' || check.status === 'queued'
+    );
+
+    if (!hasPendingChecks) return;
+
+    const interval = setInterval(() => {
+      refetchCheckRuns();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [checkRuns, refetchCheckRuns]);
 
   // Fetch threads for selected PR
   const { data: threads } = usePRThreads(owner, repo, currentPRNumber);
