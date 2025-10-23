@@ -22,6 +22,7 @@ async function buildServer() {
     logger: {
       level: process.env.LOG_LEVEL || 'info',
     },
+    maxParamLength: 500, // Increased from default 100 to handle long branch names in stack IDs
   }).withTypeProvider<ZodTypeProvider>();
 
   // Set up validators and serializers for Zod
